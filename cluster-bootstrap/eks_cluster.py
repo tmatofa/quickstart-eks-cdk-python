@@ -84,6 +84,19 @@ deploy_external_dns = True
 # Deploy managed Elasticsearch and fluent-bit Daemonset?
 deploy_managed_elasticsearch = True
 
+# The capacity in Nodes and Volume Size/Type for the AWS Elasticsearch
+es_capacity = es.CapacityConfig(
+    data_nodes=1,
+    data_node_instance_type="r5.large.elasticsearch",
+    master_nodes=0,
+    master_node_instance_type="r5.large.elasticsearch"
+)
+es_ebs = es.EbsOptions(
+    enabled=True,
+    volume_type=ec2.EbsDeviceVolumeType.GP2,
+    volume_size=10
+)
+
 # Deploy the kube-prometheus operator (on-cluster Prometheus & Grafana)?
 deploy_kube_prometheus_operator = True
 
@@ -420,7 +433,7 @@ class EKSClusterStack(core.Stack):
             externaldns_chart = eks_cluster.add_helm_chart(
                 "external-dns",
                 chart="external-dns",
-                version="4.9.0",
+                version="5.0.0",
                 release="externaldns",
                 repository="https://charts.bitnami.com/bitnami",
                 namespace="kube-system",
@@ -480,7 +493,7 @@ class EKSClusterStack(core.Stack):
             awsebscsi_chart = eks_cluster.add_helm_chart(
                 "aws-ebs-csi-driver",
                 chart="aws-ebs-csi-driver",
-                version="0.9.14",
+                version="1.0.1",
                 release="awsebscsidriver",
                 repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
                 namespace="kube-system",
@@ -553,7 +566,7 @@ class EKSClusterStack(core.Stack):
             awsefscsi_chart = eks_cluster.add_helm_chart(
                 "aws-efs-csi-driver",
                 chart="aws-efs-csi-driver",
-                version="1.1.1",
+                version="1.2.4",
                 release="awsefscsidriver",
                 repository="https://kubernetes-sigs.github.io/aws-efs-csi-driver/",
                 namespace="kube-system",
@@ -598,7 +611,7 @@ class EKSClusterStack(core.Stack):
             clusterautoscaler_chart = eks_cluster.add_helm_chart(
                 "cluster-autoscaler",
                 chart="cluster-autoscaler",
-                version="9.7.0",
+                version="9.9.2",
                 release="clusterautoscaler",
                 repository="https://kubernetes.github.io/autoscaler",
                 namespace="kube-system",
@@ -624,17 +637,6 @@ class EKSClusterStack(core.Stack):
             # NOTE: I changed this to a removal_policy of DESTROY to help cleanup while I was 
             # developing/iterating on the project. If you comment out that line it defaults to keeping 
             # the Domain upon deletion of the CloudFormation stack so you won't lose your log data
-            es_capacity = es.CapacityConfig(
-                data_nodes=1,
-                data_node_instance_type="r5.large.elasticsearch",
-                master_nodes=0,
-                master_node_instance_type="r5.large.elasticsearch"
-            )
-            es_ebs = es.EbsOptions(
-                enabled=True,
-                volume_type=ec2.EbsDeviceVolumeType.GP2,
-                volume_size=10
-            )
             es_access_policy_statement_json_1 = {
                 "Effect": "Allow",
                 "Action": "es:*",
@@ -709,7 +711,7 @@ class EKSClusterStack(core.Stack):
             prometheus_chart = eks_cluster.add_helm_chart(
                 "metrics",
                 chart="kube-prometheus-stack",
-                version="14.0.1",
+                version="15.4.6",
                 release="prometheus",
                 repository="https://prometheus-community.github.io/helm-charts",
                 namespace="kube-system",
@@ -795,7 +797,7 @@ class EKSClusterStack(core.Stack):
             metricsserver_chart = eks_cluster.add_helm_chart(
                 "metrics-server",
                 chart="metrics-server",
-                version="5.8.0",
+                version="5.8.7",
                 release="metricsserver",
                 repository="https://charts.bitnami.com/bitnami",
                 namespace="kube-system",
@@ -810,7 +812,7 @@ class EKSClusterStack(core.Stack):
             gatekeeper_chart = eks_cluster.add_helm_chart(
                 "gatekeeper",
                 chart="gatekeeper",
-                version="3.4.0-beta.0",
+                version="3.4.0",
                 release="gatekeeper",
                 repository="https://open-policy-agent.github.io/gatekeeper/charts",
                 namespace="kube-system"
@@ -1349,7 +1351,7 @@ class EKSClusterStack(core.Stack):
             flux_gatekeeper_chart = eks_cluster.add_helm_chart(
                 "flux-gatekeeper",
                 chart="flux",
-                version="1.8.0",
+                version="1.9.0",
                 release="flux-gatekeeper",
                 repository="https://charts.fluxcd.io",
                 namespace="kube-system",
