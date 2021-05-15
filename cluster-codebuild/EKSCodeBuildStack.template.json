@@ -170,6 +170,7 @@
           "Type": "GITHUB"
         },
         "EncryptionKey": "alias/aws/s3",
+        "SourceVersion": "main",
         "Triggers": {
           "FilterGroups": [
             [

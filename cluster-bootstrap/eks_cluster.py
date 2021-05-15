@@ -1238,7 +1238,7 @@ class EKSClusterStack(core.Stack):
             if (create_new_cluster_admin_role is True):
                 cluster_admin_role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
             
-            # Create code-server bastion
+            # Create Bastion
             # Get Latest Amazon Linux AMI
             amzn_linux = ec2.MachineImage.latest_amazon_linux(
                 generation=ec2.AmazonLinuxGeneration.AMAZON_LINUX_2,
@@ -1247,7 +1247,7 @@ class EKSClusterStack(core.Stack):
                 storage=ec2.AmazonLinuxStorage.GENERAL_PURPOSE
                 )
 
-            # Create SecurityGroup for code-server
+            # Create SecurityGroup for bastion
             bastion_security_group = ec2.SecurityGroup(
                 self, "BastionSecurityGroup",
                 vpc=eks_vpc,
@@ -1260,9 +1260,9 @@ class EKSClusterStack(core.Stack):
                 ec2.Port.all_traffic()
             )
 
-            # Create our EC2 instance running CodeServer
+            # Create our EC2 instance for bastion
             bastion_instance = ec2.Instance(
-                self, "CodeServerInstance",
+                self, "BastionInstance",
                 instance_type=ec2.InstanceType("t3.large"),
                 machine_image=amzn_linux,
                 role=cluster_admin_role,
