@@ -1,5 +1,8 @@
 # EKS CDK Quick Start (in Python)
 
+> **DEVELOPER PREVIEW NOTE:** Thise project is currently available as a preview and should not be considered for production use at this time. 
+
+
 This Quick Start is a reference architecture and implementation of how you can use the Cloud Development Kit (CDK) to orchestrate the Elastic Kubernetes Serivce (EKS) to quickly deploy a more complete and "production ready" Kubernetes environment on AWS.
 
 ## What does this Quick Start create for you:
