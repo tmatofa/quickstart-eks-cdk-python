@@ -2,8 +2,12 @@
 Purpose
 
 Example of how to provision an EKS cluster, create the IAM Roles for Service Accounts (IRSA) mappings,
-and then deploy various required cluster add-ons (AWS LB Controller, ExternalDNS, Prometheus/Grafana,
-AWS Elasticsearch, etc.)
+and then deploy various common cluster add-ons (AWS LB Controller, ExternalDNS, EBS/EFS CSI Drivers,
+Cluster Autoscaler, AWS Elasticsearch, Prometheus & Grafana, Calico NetworkPolicy enforceement, 
+OPA Gatekeeper w/example policies, etc.)
+
+NOTE: This pulls many parameters/options for what you'd like from the cdk.json context section.
+Have a look there for many options you can chance to customise how this template for your environment/needs.
 """
 
 from aws_cdk import (
@@ -17,121 +21,8 @@ from aws_cdk import (
 )
 import os
 
+# Import the custom resource to switch on control plane logging from ekslogs_custom_resource.py
 from ekslogs_custom_resource import EKSLogsObjectResource
-
-# EKS Control Plane version (this is part of the CDK EKS class e.g. eks.KubernetesVersion.V1_19)
-# It is an object not a string and VS Code etc. will autocomplete it for you when you type the dot
-# See https://docs.aws.amazon.com/cdk/api/latest/python/aws_cdk.aws_eks/KubernetesVersion.html
-eks_version = eks.KubernetesVersion.V1_19
-
-# EKS Node Instance Type
-eks_node_type = "m5.large"
-
-# EKS Node Instance Quantity
-eks_node_quantity = 3
-
-# EKS Node Boot Volume Size (in GB)
-eks_node_disk_size = 20
-
-# EKS Node Version (e.g. 1.19.6-20210414)
-# You can look this up here https://docs.aws.amazon.com/eks/latest/userguide/eks-linux-ami-versions.html
-eks_node_ami_version = "1.19.6-20210504"
-
-# Set this to True in order to deploy a Bastion host to access your new cluster/environment
-deploy_bastion = True
-
-# Deploy Client VPN?
-# Before setting this to true you'll need to create and upload your certs as per these instructions
-# And then put the ARNs below in client_certificate_arn and server_certificate_arn
-# https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual
-deploy_client_vpn = False
-client_certificate_arn="arn:aws:acm:ap-southeast-2:123456789123:certificate/XXX"
-server_certificate_arn="arn:aws:acm:ap-southeast-2:123456789123:certificate/XXX"
-
-# CIDR Block for VPN Clients (has to be at least a /22)
-vpn_client_cidr_block="10.1.0.0/22"
-
-# Create a new VPC for the cluster?
-# If you set this to False then specify the VPC name to use below
-create_new_vpc = True
-
-# Set this to the CIDR for your new VPC
-vpc_cidr="10.0.0.0/22"
-
-# Set this to the CIDR mask/size for your public subnets
-vpc_cidr_mask_public=26
-
-# Set this to the CIDR mask/size for your private subnets
-vpc_cidr_mask_private=24
-
-# If create_new_vpc is False then enter the name of the existing VPC to use
-# Note that if you use an existing VPC you'll need to tag the subnets as
-# described here https://aws.amazon.com/premiumsupport/knowledge-center/eks-vpc-subnet-discovery/
-existing_vpc_name="VPC"
-
-# Create a new role as the inital admin for the cluster?
-create_new_cluster_admin_role = True
-
-# If create_new_cluster_admin_role is False then provide the ARN of the existing role to use
-existing_role_arn="arn:aws:iam::123456789123:role/RoleName"
-
-# Deploy the AWS Load Balancer Controller?
-deploy_aws_lb_controller = True
-
-# Deploy ExternalDNS?
-deploy_external_dns = True
-
-# Deploy managed Elasticsearch and fluent-bit Daemonset?
-deploy_managed_elasticsearch = True
-
-# The capacity in Nodes and Volume Size/Type for the AWS Elasticsearch
-es_capacity = es.CapacityConfig(
-    data_nodes=1,
-    data_node_instance_type="r5.large.elasticsearch",
-    master_nodes=0,
-    master_node_instance_type="r5.large.elasticsearch"
-)
-es_ebs = es.EbsOptions(
-    enabled=True,
-    volume_type=ec2.EbsDeviceVolumeType.GP2,
-    volume_size=10
-)
-
-# Deploy the kube-prometheus operator (on-cluster Prometheus & Grafana)?
-deploy_kube_prometheus_operator = True
-
-# Deploy AWS EBS CSI Driver?
-deploy_aws_ebs_csi = True
-
-# Deploy AWS EFS CSI Driver?
-deploy_aws_efs_csi = True
-
-# Deploy OPA Gatekeeper?
-deploy_opa_gatekeeper = True
-
-# Deploy example Gatekeeper policies?
-deploy_gatekeeper_policies = True
-
-# Gateekeper policies git repo
-gatekeeper_policies_git_url = "ssh://git@github.com/aws-quickstart/quickstart-eks-cdk-python"
-
-# Gatekeeper policies git branch
-gatekeeper_policies_git_branch = "main"
-
-# Gatekeeper policies git path
-gatekeeper_policies_git_path = "gatekeeper-policies"
-
-# Deploy Cluster Autoscaler?
-deploy_cluster_autoscaler = True
-
-# Deploy metrics-server (required for the Horizontal Pod Autoscaler (HPA))?
-deploy_metrics_server = True
-
-# Deploy Calico Network Policy Provider?
-deploy_calico_np = True
-
-# Deploy AWS Simple Systems Manager (SSM) Agent?
-deploy_ssm_agent = True
 
 class EKSClusterStack(core.Stack):
 
@@ -139,7 +30,7 @@ class EKSClusterStack(core.Stack):
         super().__init__(scope, id, **kwargs)
 
         # Either create a new IAM role to administrate the cluster or create a new one
-        if (create_new_cluster_admin_role is True):
+        if (self.node.try_get_context("create_new_cluster_admin_role") == "True"):
             cluster_admin_role = iam.Role(self, "ClusterAdminRole",
                 assumed_by=iam.CompositePrincipal(
                     iam.AccountRootPrincipal(),
@@ -157,11 +48,11 @@ class EKSClusterStack(core.Stack):
         else:
             # You'll also need to add a trust relationship to ec2.amazonaws.com to sts:AssumeRole to this as well
             cluster_admin_role = iam.Role.from_role_arn(self, "ClusterAdminRole",
-                role_arn=existing_role_arn
+                role_arn=self.node.try_get_context("existing_admin_role_arn")
             )
     
         # Either create a new VPC with the options below OR import an existing one by name
-        if (create_new_vpc is True):
+        if (self.node.try_get_context("create_new_vpc") == "True"):
             eks_vpc = ec2.Vpc(
                 self, "VPC",
                 # We are choosing to spread our VPC across 3 availability zones
@@ -170,24 +61,24 @@ class EKSClusterStack(core.Stack):
                 # I am using that instead of a /16 etc. as I know many companies have constraints here
                 # If you can go bigger than this great - but I would try not to go much smaller if you can
                 # I use https://www.davidc.net/sites/default/subnets/subnets.html to me work out the CIDRs
-                cidr=vpc_cidr,
+                cidr=self.node.try_get_context("vpc_cidr"),
                 subnet_configuration=[
                     # 3 x Public Subnets (1 per AZ) with 64 IPs each for our ALBs and NATs
                     ec2.SubnetConfiguration(
                         subnet_type=ec2.SubnetType.PUBLIC,
                         name="Public",
-                        cidr_mask=vpc_cidr_mask_public
+                        cidr_mask=self.node.try_get_context("vpc_cidr_mask_public")
                     ), 
                     # 3 x Private Subnets (1 per AZ) with 256 IPs each for our Nodes and Pods
                     ec2.SubnetConfiguration(
                         subnet_type=ec2.SubnetType.PRIVATE,
                         name="Private",
-                        cidr_mask=vpc_cidr_mask_private
+                        cidr_mask=self.node.try_get_context("vpc_cidr_mask_private")
                     )
                 ]
             )   
         else:
-            eks_vpc = ec2.Vpc.from_lookup(self, 'VPC', vpc_name=existing_vpc_name)
+            eks_vpc = ec2.Vpc.from_lookup(self, 'VPC', vpc_name=self.node.try_get_context("existing_vpc_name"))
 
         # Create an EKS Cluster
         eks_cluster = eks.Cluster(
@@ -197,24 +88,24 @@ class EKSClusterStack(core.Stack):
             # Make our cluster's control plane accessible only within our private VPC
             # This means that we'll have to ssh to a jumpbox/bastion or set up a VPN to manage it
             endpoint_access=eks.EndpointAccess.PRIVATE,
-            version=eks_version,
+            version=eks.KubernetesVersion.of(self.node.try_get_context("eks_version")),
             default_capacity=0
         )
 
         # Add a Managed Node Group
         eks_node_group = eks_cluster.add_nodegroup_capacity(
             "cluster-default-ng",
-            desired_size=eks_node_quantity,
-            disk_size=eks_node_disk_size,
+            desired_size=self.node.try_get_context("eks_node_quantity"),
+            disk_size=self.node.try_get_context("eks_node_disk_size"),
             # The default in CDK is to force upgrades through even if they violate - it is safer to not do that
             force_update=False,
-            instance_types=[ec2.InstanceType(eks_node_type)],
-            release_version=eks_node_ami_version
+            instance_types=[ec2.InstanceType(self.node.try_get_context("eks_node_instance_type"))],
+            release_version=self.node.try_get_context("eks_node_ami_version")
         )
         eks_node_group.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
         
         # AWS Load Balancer Controller
-        if (deploy_aws_lb_controller is True):
+        if (self.node.try_get_context("deploy_aws_lb_controller") == "True"):
             alb_service_account = eks_cluster.add_service_account(
                 "aws-load-balancer-controller",
                 name="aws-load-balancer-controller",
@@ -394,7 +285,7 @@ class EKSClusterStack(core.Stack):
             awslbcontroller_chart.node.add_dependency(alb_service_account)
 
         # External DNS Controller
-        if (deploy_external_dns is True):
+        if (self.node.try_get_context("deploy_external_dns") == "True"):
             externaldns_service_account = eks_cluster.add_service_account(
                 "external-dns",
                 name="external-dns",
@@ -455,7 +346,7 @@ class EKSClusterStack(core.Stack):
             externaldns_chart.node.add_dependency(externaldns_service_account)    
 
         # AWS EBS CSI Driver
-        if (deploy_aws_ebs_csi is True):
+        if (self.node.try_get_context("deploy_aws_ebs_csi") == "True"):
             awsebscsidriver_service_account = eks_cluster.add_service_account(
                 "awsebscsidriver",
                 name="awsebscsidriver",
@@ -517,7 +408,7 @@ class EKSClusterStack(core.Stack):
             awsebscsi_chart.node.add_dependency(awsebscsidriver_service_account)
 
         # AWS EFS CSI Driver
-        if (deploy_aws_efs_csi is True):
+        if (self.node.try_get_context("deploy_aws_efs_csi") == "True"):
             awsefscsidriver_service_account = eks_cluster.add_service_account(
                 "awsefscsidriver",
                 name="awsefscsidriver",
@@ -582,7 +473,7 @@ class EKSClusterStack(core.Stack):
             awsefscsi_chart.node.add_dependency(awsefscsidriver_service_account)
 
         # cluster-autoscaler
-        if (deploy_cluster_autoscaler is True):
+        if (self.node.try_get_context("deploy_cluster_autoscaler") == "True"):
             clusterautoscaler_service_account = eks_cluster.add_service_account(
                 "clusterautoscaler",
                 name="clusterautoscaler",
@@ -632,11 +523,25 @@ class EKSClusterStack(core.Stack):
             clusterautoscaler_chart.node.add_dependency(clusterautoscaler_service_account)
         
         # Deploy a managed Amazon Elasticsearch and a fluent-bit to ship our container logs there
-        if (deploy_managed_elasticsearch is True):
+        if (self.node.try_get_context("deploy_managed_elasticsearch") == "True"):
             # Create a new ElasticSearch Domain
             # NOTE: I changed this to a removal_policy of DESTROY to help cleanup while I was 
             # developing/iterating on the project. If you comment out that line it defaults to keeping 
             # the Domain upon deletion of the CloudFormation stack so you won't lose your log data
+            
+            # The capacity in Nodes and Volume Size/Type for the AWS Elasticsearch
+            es_capacity = es.CapacityConfig(
+                data_nodes=self.node.try_get_context("es_data_nodes"),
+                data_node_instance_type=self.node.try_get_context("es_data_node_instance_type"),
+                master_nodes=self.node.try_get_context("es_master_nodes"),
+                master_node_instance_type=self.node.try_get_context("es_master_node_instance_type")
+            )
+            es_ebs = es.EbsOptions(
+                enabled=True,
+                volume_type=ec2.EbsDeviceVolumeType.GP2,
+                volume_size=self.node.try_get_context("es_ebs_volume_size")
+            )
+
             es_access_policy_statement_json_1 = {
                 "Effect": "Allow",
                 "Action": "es:*",
@@ -705,7 +610,7 @@ class EKSClusterStack(core.Stack):
             )
 
         # Deploy Prometheus and Grafana
-        if (deploy_kube_prometheus_operator is True):
+        if (self.node.try_get_context("deploy_kube_prometheus_operator") == "True"):
             # TODO Replace this with the new AWS Managed Prometheus and Grafana when it is Generally Available (GA)
             # For more information see https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
             prometheus_chart = eks_cluster.add_helm_chart(
@@ -726,7 +631,7 @@ class EKSClusterStack(core.Stack):
                                 ],
                                 "resources": {
                                 "requests": {
-                                    "storage": "8Gi"
+                                    "storage": self.node.try_get_context("prometheus_disk_size")
                                 }
                                 },
                                 "storageClassName": "gp2"
@@ -745,7 +650,7 @@ class EKSClusterStack(core.Stack):
                                 ],
                                 "resources": {
                                 "requests": {
-                                    "storage": "2Gi"
+                                    "storage": self.node.try_get_context("alertmanager_disk_size")
                                 }
                                 },
                                 "storageClassName": "gp2"
@@ -757,7 +662,8 @@ class EKSClusterStack(core.Stack):
                     "grafana": {
                         "persistence": {
                             "enabled": "true",
-                            "storageClassName": "gp2"
+                            "storageClassName": "gp2",
+                            "size": self.node.try_get_context("grafana_disk_size")
                         }
                     }
                 }          
@@ -792,7 +698,7 @@ class EKSClusterStack(core.Stack):
             })
 
         # Install the metrics-server (required for the HPA)
-        if (deploy_metrics_server is True):
+        if (self.node.try_get_context("deploy_metrics_server") == "True"):
             # For more info see https://github.com/bitnami/charts/tree/master/bitnami/metrics-server
             metricsserver_chart = eks_cluster.add_helm_chart(
                 "metrics-server",
@@ -807,7 +713,7 @@ class EKSClusterStack(core.Stack):
             )
 
         # Install the OPA Gatekeeper
-        if (deploy_opa_gatekeeper is True):
+        if (self.node.try_get_context("deploy_opa_gatekeeper") == "True"):
             # For more info see https://github.com/open-policy-agent/gatekeeper
             gatekeeper_chart = eks_cluster.add_helm_chart(
                 "gatekeeper",
@@ -838,8 +744,8 @@ class EKSClusterStack(core.Stack):
             if (awslbcontroller_chart is not None):            
                 gatekeeper_chart.node.add_dependency(awslbcontroller_chart)
 
-        # Install the OPA Gatekeeper
-        if (deploy_calico_np is True):
+        # Install Calico to enforce NetworkPolicies
+        if (self.node.try_get_context("deploy_calico_np") == "True"):
             # For more info see https://docs.aws.amazon.com/eks/latest/userguide/calico.html 
             # and https://github.com/aws/amazon-vpc-cni-k8s/tree/master/charts/aws-calico
 
@@ -1156,7 +1062,7 @@ class EKSClusterStack(core.Stack):
             calico_np_chart.node.add_dependency(calico_crds_manifest_12)
 
         # Deploy SSM Agent
-        if (deploy_ssm_agent is True):
+        if (self.node.try_get_context("deploy_ssm_agent") == "True"):
             # For more information see https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/install-ssm-agent-on-amazon-eks-worker-nodes-by-using-kubernetes-daemonset.html
             ssm_agent_manifest = eks_cluster.add_manifest("SSMAgentManifest",
             {
@@ -1227,7 +1133,7 @@ class EKSClusterStack(core.Stack):
                 
         # If you have a 'True' in the deploy_bastion variable at the top of the file we'll deploy
         # a basion server that you can connect to via Systems Manager Session Manager
-        if (deploy_bastion is True):
+        if (self.node.try_get_context("deploy_bastion") == "True"):
             # Create an Instance Profile for our Admin Role to assume w/EC2
             cluster_admin_role_instance_profile = iam.CfnInstanceProfile(
                 self, "ClusterAdminRoleInstanceProfile",
@@ -1235,7 +1141,7 @@ class EKSClusterStack(core.Stack):
             )
 
             # Another way into our Bastion is via Systems Manager Session Manager
-            if (create_new_cluster_admin_role is True):
+            if (self.node.try_get_context("create_new_cluster_admin_role") == "True"):
                 cluster_admin_role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
             
             # Create Bastion
@@ -1286,15 +1192,15 @@ class EKSClusterStack(core.Stack):
             bastion_instance.node.add_dependency(ssm_agent_manifest)
             
         
-        if (deploy_client_vpn is True):
+        if (self.node.try_get_context("deploy_client_vpn") == "True"):
             # Create and upload your client and server certs as per https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual
             # And then put the ARNs for them into the items below
             client_cert = cm.Certificate.from_certificate_arn(
                 self, "ClientCert",
-                certificate_arn=client_certificate_arn)
+                certificate_arn=self.node.try_get_context("vpn_client_certificate_arn"))
             server_cert = cm.Certificate.from_certificate_arn(
                 self, "ServerCert",
-                certificate_arn=server_certificate_arn)
+                certificate_arn=self.node.try_get_context("vpn_server_certificate_arn"))
 
             # Create CloudWatch Log Group and Stream and keep the logs for 1 month
             log_group = logs.LogGroup(
@@ -1312,7 +1218,7 @@ class EKSClusterStack(core.Stack):
                         "clientRootCertificateChainArn": client_cert.certificate_arn
                     }
                 }],
-                client_cidr_block=vpn_client_cidr_block,
+                client_cidr_block=self.node.try_get_context("vpn_client_cidr_block"),
                 server_certificate_arn=server_cert.certificate_arn,
                 connection_log_options={
                     "enabled": True,
@@ -1346,7 +1252,7 @@ class EKSClusterStack(core.Stack):
             eks_arn=eks_cluster.cluster_arn
         )
 
-        if (deploy_gatekeeper_policies is True):
+        if (self.node.try_get_context("deploy_gatekeeper_policies") == "True"):
             # For more info see https://github.com/aws-quickstart/quickstart-eks-cdk-python/tree/main/gatekeeper-policies
             flux_gatekeeper_chart = eks_cluster.add_helm_chart(
                 "flux-gatekeeper",
@@ -1357,9 +1263,9 @@ class EKSClusterStack(core.Stack):
                 namespace="kube-system",
                 values={
                     "git": {
-                        "url": gatekeeper_policies_git_url,
-                        "branch": gatekeeper_policies_git_branch,
-                        "path": gatekeeper_policies_git_path
+                        "url": self.node.try_get_context("gatekeeper_policies_git_url"),
+                        "branch": self.node.try_get_context("gatekeeper_policies_git_branch"),
+                        "path": self.node.try_get_context("gatekeeper_policies_git_path")
                     }
                 }
             )
