@@ -12,18 +12,19 @@ This Quick Start is a reference architecture and implementation of how you can u
         1. Note that if you do this you'll also have to tag your subnets as per https://aws.amazon.com/premiumsupport/knowledge-center/eks-vpc-subnet-discovery/
 1. A new EKS cluster with:
     1. A dedicated new IAM role to create it from. The role that creates the cluster is a permanent, and rather hidden, full admin role that doesn't appear in nor is subject to the aws-auth config map. So, you want a dedicated role explicity for that purpose like CDK does for you here that you can then restrict access to assume unless you need it (e.g. you lock yourself out of the cluster with by making a mistake in the aws-auth configmap).
-        1. Alternatively, you can specify an existing role ARN to make the administrator by flipping to `False` in `create_new_cluster_admin_role` and then putting the arn to use in `existing_admin_role_arn` in `cluster-bootstrap/cdk.json`.
-    1. A new Managed Node Group with 3 x m5.large instances spread across 3 Availability Zones.
-        1. You can change the instance type and quantity by changing `eks_node_quantity` and/or `eks_node_instance_type` in `cluster-bootstrap/eks-clustery.py`.
+        1. This creates a second role to administer the cluster that isn't the aforementioned owner role as well
+        2. Alternatively, you can specify an existing role ARN to make the first administrator by flipping to `False` in `create_new_cluster_admin_role` and then putting the arn to use in `existing_admin_role_arn` in `cluster-bootstrap/cdk.json`.
+    1. A new Managed Node Group with 3 x m5.large instances w/20GB volumes spread across 3 Availability Zones.
+        1. You can change the instance type, quantity and disk size by changing `eks_node_quantity` and/or `eks_node_instance_type` in `cluster-bootstrap/eks-clustery.py`.
     3. All control plane logging to CloudWatch Logs enabled (defaulting to 1 month's retention within CloudWatch Logs).
 1. The AWS Load Balancer Controller (https://kubernetes-sigs.github.io/aws-load-balancer-controller) to allow you to seamlessly use ALBs for Ingress and NLB for Services.
 1. External DNS (https://github.com/kubernetes-sigs/external-dns) to allow you to automatically create/update Route53 entries to point your 'real' names at your Ingresses and Services.
 1. A new managed Amazon Elasticsearch Domain behind a private VPC endpoint as well as an aws-for-fluent-bit DaemonSet (https://github.com/aws/aws-for-fluent-bit) to ship all your container logs there - including enriching them with the Kubernetes metadata using the kubernetes fluent-bit filter.
-    1. Note that this provisions a single node 10GB managed Elasticsearch Domain suitable for a proof of concept. To use this in produciton you'll likely need to edit the `es_capacity` section of `cluster-bootstrap/cdk.json` to scale this out from a capacity and availability perspective. For more information see https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/sizing-domains.html.
-    1. Note that this provisions an Elasticsearch and Kibana that does not have a login/password configured. It is secured instead by network access controlled by it being in a private subnet and its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment, for production use you'd want to consider implementing Cognito to control user access to Kibana - https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam
-1. (Temporarily until the AWS Managed Prometheus/Grafana are available) The kube-prometheus Operator (https://github.com/prometheus-operator/kube-prometheus) which deploys you a Prometheus on your cluster that will collect all your cluster metrics as well as a Grafana to visualise them.
+    1. Note that this provisions a single node 10GB managed Elasticsearch Domain suitable for a proof of concept. To use this in produciton you'll likely need to edit the various `es_` parameters of `cluster-bootstrap/cdk.json` to scale this out/up from a disk and node perspective. For more information see https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/sizing-domains.html.
+    1. Note that this provisions an Elasticsearch and Kibana that does not have a login/password configured. It is secured instead by network access controlled both by it being in a private subnet as well as its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment, for production use you'd want to consider implementing Cognito to control user access to Kibana - https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam
+1. (Temporarily until the AWS Managed Prometheus/Grafana are available in all our EKS region(s)) The kube-prometheus Operator (https://github.com/prometheus-operator/kube-prometheus) which deploys you a Prometheus on your cluster that will collect all your cluster metrics as well as a Grafana to visualise them.
     1. You can adjust the disk sise of these in `cluster-bootstrap/cdk.json`
-    1. TODO: Add some initial alerts for sensible common items in the cluster via Prometheus/Alertmanager
+    2. TODO Offer a AWS Managed Prometheus/Grafana option as well
 1. The AWS EBS CSI Driver (https://github.com/kubernetes-sigs/aws-ebs-csi-driver). Note that new development on EBS functionality has moved out of the Kubernetes mainline to this externalised CSI driver.
 1. The AWS EFS CSI Driver (https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html). Note that new development on EFS functionality has moved out of the Kubernetes mainline to this externalised CSI driver.
 1. An OPA Gatekeeper to enforce prevenetative secruity and operational policies (https://github.com/open-policy-agent/gatekeeper). A default set of example policies is deployed by default - see `gatekeeper-policies/README.md`
@@ -32,7 +33,7 @@ This Quick Start is a reference architecture and implementation of how you can u
 1. The Calico Network Policy Provider (https://docs.aws.amazon.com/eks/latest/userguide/calico.html). This enforces any [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) that you specify.
 1. The AWS Systems Manager (SSM) agent. This allows for various management activities (e.g. Inventory, Patching, Session Mnaager, etc.) of your Instances/Nodes by AWS Systems Manager.
 
-All of the add-ons are optional and you control whether you get them with variables in  `cluster-bootstrap/cdk.json` that you flip to True/False
+All of the add-ons are optional and you control whether you'll get them with parameters in `cluster-bootstrap/cdk.json` that you flip to True/False
 
 ### Why Cloud Development Kit (CDK)?
 
@@ -49,7 +50,7 @@ What makes CDK uniquely good when it comes to our EKS Quickstart is:
 ## Getting started
 
 You can either deploy this from your machine or leverge CodeBuild. The advantage of using CodeBuild is it also sets up a 'GitOps' approach where when you merge changes to
-the cluster-bootstrap folder it'll (re)run `cdk deploy` for you. This means that to update the cluster you just change this file and merge. 
+the cluster-bootstrap folder on a particular branch it'll (re)run `cdk deploy` for you to action the changes.
 
 ###  Deploy from CodeBuild
 To use the CodeBuild CloudFormation Template:
@@ -61,7 +62,7 @@ To use the CodeBuild CloudFormation Template:
 1. Go to the CodeBuild console, click on the Build project that starts with `EKSCodeBuild`, and then click the Start build button.
 1. (Optional) You can click the Tail logs button to follow along with the build process
 
-**_NOTE:_** This also enables a GitOps pattern where changes to the cluster-bootrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `cdk deploy` via web hook.
+**_NOTE:_** This also enables a GitOps pattern where changes to the cluster-bootrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `cdk deploy` via web hook. You'll likely want to reconfigure this on a branch specific to each environment/cluster.
 
 ### Deploy from your laptop
 
@@ -88,14 +89,16 @@ Run `sudo ./ubuntu-prepreqs.sh`
 3. Run `pip install --upgrade -r requirements.txt` to install the required Python bits of the CDK
 4. Run `export CDK_DEPLOY_REGION=ap-southeast-2` replacing ap-southeast-2 with your region of choice
 5. Run `export CDK_DEPLOY_ACCOUNT=123456789123` replacing 123456789123 with your AWS account number
-6. (Optional) If you want to make an existing IAM User or Role the cluster admin rather than creating a new one then edit `cluster-bootstrap/cdk.json` and comment out the curernt cluster_admin_role and uncomment the one beneath it and fill in the ARN of the User/Role you'd like there.
+6. (Optional) If you want to administer the cluster from an existing IAM User or Role the cluster admin rather than creating a new one you'll need to assume then edit `cluster-bootstrap/cdk.json` setting `create_new_cluster_admin_role` to "False" and then enter the ARN of the role to use in `existing_admin_role_arn`.
 7. (Only required the first time you use the CDK in this account) Run `cdk bootstrap` to create the S3 bucket where it puts the CDK puts its artifacts
 8. (Only required the first time ES in VPC mode is used in this account) Run `aws iam create-service-linked-role --aws-service-name es.amazonaws.com`
 9. Run `cdk deploy --require-approval never`
 
 ### Finish setup of Flux for GitOps deployment of gatekeeper-policies
 
-We've deployed Flux to deploy - and then keep in sync via GitOps - our default Gatekeeper policies and constraints. In order for that to work, though, we'll need to get the SSH key that Flux generated and add it to GitHub to give us the required access.
+If you set `deploy_gatekeeper_policies` to "True" and point the `gatekeeper_policies_git_*` to point at your Fork of this repo then this deploys Flux to action these changes for you via GitOps.
+
+In order for that to work, though, we'll need to get the SSH key that Flux generated and add it to GitHub to give us the required access.
 
 fluxctl and the required access is set up on the Bastion - if you have deployed that:
 
@@ -113,17 +116,17 @@ If you set `deploy_bastion` to `True` in `cluster-bootstrap/cdk.json` then the t
 To access this bastion:
 1. Go to the Systems Manager Server in the AWS Console
 1. Go to Managed Instances on the left hand navigation pane
-1. Select the instance with the name `EKSClusterStack/CodeServerInstance`
+1. Select the instance with the name `EKSClusterStack/BastionInstance`
 1. Under the Instance Actions menu on the upper right choose Start Session
-1. You need to run `sudo bash` to get to root's profile where we've set up kubectl
+1. You need to run `sudo bash` to get to root's profile where we've set up kubectl via UserData
 1. Run `kubectl get nodes` to see that all the tools are there and set up for you.
 
 
 ## Set up your Client VPN to access the environment
 
-If you set `deploy_vpn` to `True` in `cluster-bootstrap/cdk.json` then the template will deploy a Client VPN so that you can securely access the cluster's private VPC subnets from any machine. You'll need this to be able to reach the Kibana for your logs and Grafana for your metrics by default (unless you are using an existing VPC where you have already arranged such connectivity)
+If you set `deploy_vpn` to `True` in `cluster-bootstrap/cdk.json` then the template will deploy a Client VPN so that you can securely access the cluster's private VPC subnets from any machine. You'll need this to be able to reach the Kibana for your logs and Grafana for your metrics by default (unless you are using an existing VPC where you have already arranged such connectivity via Site-to-Site VPN or DirectConnect etc.)
 
-Note that you'll also need to create client and server certificates and upload them to ACM by following these instructions - https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual - and update `ekscluster.py` with the certificate ARNs for this to work.
+Note that you'll need to create client and server certificates and upload them to ACM by following these instructions - https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual - and update `cluster-bootstrap/cdk.json` with the certificate ARNs before setting `deploy_vpn` to "True" will work
 
 Once it has created your VPN you then need to configure the client:
 
@@ -136,7 +139,7 @@ Once it has created your VPN you then need to configure the client:
 1. Create a new profile pointing it at that configuration file
 1. Connect to the VPN
 
-Once you are connected it is a split tunnel - meaning only the addresses in your EKS VPC will get routed through the VPN tunnel.
+Once you are connected it is via a split tunnel - meaning only the addresses in your EKS VPC will get routed through the VPN tunnel.
 
 You then need to add the EKS cluster to your local kubeconfig by running the command in the clusterConfigCommand Output of the EKSClusterStack.
 
@@ -161,7 +164,7 @@ Since this ElasticSearch can only be reached if you are coming in via the Bastio
 1. Pick @timestamp from the dropbown box and click Create index pattern
 1. Then go back Home and click Discover
 
-TODO: Walk through how to do a few basic things in Kibana with searching and dashboarding your logs.
+TODO: Walk through how to do a few basic things in Kibana with searching/filtering/dashboarding your cluster logs.
 
 ## Checking out Grafana and the out-of-the-box metrics dashboards
 
@@ -184,7 +187,7 @@ Within all of these dashboards you can click on names as links and it'll drill d
 
 ## Deploy some sample apps to explore our new Kubernetes environment and its features
 
-TODO: Walk through deploying some apps that show off some of the cluster add-ons we've installed
+TODO: Walk through deploying some apps that will show off the cluster add-ons we've installed
 
 ## Upgrading your cluster
 
