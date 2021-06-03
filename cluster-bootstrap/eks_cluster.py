@@ -7,7 +7,7 @@ Cluster Autoscaler, AWS Elasticsearch, Prometheus & Grafana, Calico NetworkPolic
 OPA Gatekeeper w/example policies, etc.)
 
 NOTE: This pulls many parameters/options for what you'd like from the cdk.json context section.
-Have a look there for many options you can chance to customise how this template for your environment/needs.
+Have a look there for many options you can chance to customise this template for your environments/needs.
 """
 
 from aws_cdk import (
