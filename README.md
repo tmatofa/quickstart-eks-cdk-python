@@ -26,7 +26,7 @@ This Quick Start is a reference architecture and implementation of how you can u
     1. TODO: Add some initial alerts for sensible common items in the cluster via Prometheus/Alertmanager
 1. The AWS EBS CSI Driver (https://github.com/kubernetes-sigs/aws-ebs-csi-driver). Note that new development on EBS functionality has moved out of the Kubernetes mainline to this externalised CSI driver.
 1. The AWS EFS CSI Driver (https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html). Note that new development on EFS functionality has moved out of the Kubernetes mainline to this externalised CSI driver.
-1. An OPA Gatekeeper to enforce prevenetative secruity and operational policies (https://github.com/open-policy-agent/gatekeeper). A default set of example policies is deployed by default - see `gatekeeper-policies/README.md`
+1. An OPA Gatekeeper to enforce preventative secruity and operational policies (https://github.com/open-policy-agent/gatekeeper). A set of example policies is provided as well - see `gatekeeper-policies/README.md`
 1. The cluster autoscaler (CA) (https://github.com/kubernetes/autoscaler). This will scale your EC2 instances to ensure you have enough capacity to launch all of your Pods as they are deployed/scaled.
 1. The metrics-server (required for the Horizontal Pod Autoscaler (HPA)) (https://github.com/kubernetes-sigs/metrics-server)
 1. The Calico Network Policy Provider (https://docs.aws.amazon.com/eks/latest/userguide/calico.html). This enforces any [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) that you specify.
