@@ -7,38 +7,38 @@ This Quick Start is a reference architecture and implementation of how you can u
 
 ## What does this Quick Start create for you:
 
-1. An appropriate VPC (/22 CDIR w/1024 IPs by default - though you can edit this in `cluster-bootstrap/cdk.json`) with public and private subnets across three availabilty zones.
+1. An appropriate VPC (/22 CDIR w/1024 IPs by default - though you can edit this in `cluster-bootstrap/cdk.json`) with public and private subnets across three availability zones.
     1. Alternatively, just flip `create_new_vpc` to `False` and then specify the name of your VPC under `existing_vpc_name` in `cluster-bootstrap/cdk.json` to use an existing VPC. CDK will automatically work out which subnets are public and which are private and deploy to the private ones.
         1. Note that if you do this you'll also have to tag your subnets as per https://aws.amazon.com/premiumsupport/knowledge-center/eks-vpc-subnet-discovery/
 1. A new EKS cluster with:
-    1. A dedicated new IAM role to create it from. The role that creates the cluster is a permanent, and rather hidden, full admin role that doesn't appear in nor is subject to the aws-auth config map. So, you want a dedicated role explicity for that purpose like CDK does for you here that you can then restrict access to assume unless you need it (e.g. you lock yourself out of the cluster with by making a mistake in the aws-auth configmap).
+    1. A dedicated new IAM role to create it from. The role that creates the cluster is a permanent, and rather hidden, full admin role that doesn't appear in nor is subject to the aws-auth config map. So, you want a dedicated role explicitly for that purpose like CDK does for you here that you can then restrict access to assume unless you need it (e.g. you lock yourself out of the cluster with by making a mistake in the aws-auth configmap).
         1. Alternatively, you can specify an existing role ARN to make the administrator by flipping to `False` in `create_new_cluster_admin_role` and then putting the arn to use in `existing_admin_role_arn` in `cluster-bootstrap/cdk.json`.
     1. A new Managed Node Group with 3 x m5.large instances spread across 3 Availability Zones.
-        1. You can change the instance type and quantity by changing `eks_node_quantity` and/or `eks_node_instance_type` in `cluster-bootstrap/eks-clustery.py`.
+        1. You can change the instance type and quantity by changing `eks_node_quantity` and/or `eks_node_instance_type` in `cluster-bootstrap/eks-cluster.py`.
     3. All control plane logging to CloudWatch Logs enabled (defaulting to 1 month's retention within CloudWatch Logs).
 1. The AWS Load Balancer Controller (https://kubernetes-sigs.github.io/aws-load-balancer-controller) to allow you to seamlessly use ALBs for Ingress and NLB for Services.
 1. External DNS (https://github.com/kubernetes-sigs/external-dns) to allow you to automatically create/update Route53 entries to point your 'real' names at your Ingresses and Services.
 1. A new managed Amazon Elasticsearch Domain behind a private VPC endpoint as well as an aws-for-fluent-bit DaemonSet (https://github.com/aws/aws-for-fluent-bit) to ship all your container logs there - including enriching them with the Kubernetes metadata using the kubernetes fluent-bit filter.
-    1. Note that this provisions a single node 10GB managed Elasticsearch Domain suitable for a proof of concept. To use this in produciton you'll likely need to edit the `es_capacity` section of `cluster-bootstrap/cdk.json` to scale this out from a capacity and availability perspective. For more information see https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/sizing-domains.html.
+    1. Note that this provisions a single node 10GB managed Elasticsearch Domain suitable for a proof of concept. To use this in production you'll likely need to edit the `es_capacity` section of `cluster-bootstrap/cdk.json` to scale this out from a capacity and availability perspective. For more information see https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/sizing-domains.html.
     1. Note that this provisions an Elasticsearch and Kibana that does not have a login/password configured. It is secured instead by network access controlled by it being in a private subnet and its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment, for production use you'd want to consider implementing Cognito to control user access to Kibana - https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam
 1. (Temporarily until the AWS Managed Prometheus/Grafana are available) The kube-prometheus Operator (https://github.com/prometheus-operator/kube-prometheus) which deploys you a Prometheus on your cluster that will collect all your cluster metrics as well as a Grafana to visualise them.
-    1. You can adjust the disk sise of these in `cluster-bootstrap/cdk.json`
+    1. You can adjust the disk size of these in `cluster-bootstrap/cdk.json`
     1. TODO: Add some initial alerts for sensible common items in the cluster via Prometheus/Alertmanager
 1. The AWS EBS CSI Driver (https://github.com/kubernetes-sigs/aws-ebs-csi-driver). Note that new development on EBS functionality has moved out of the Kubernetes mainline to this externalised CSI driver.
 1. The AWS EFS CSI Driver (https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html). Note that new development on EFS functionality has moved out of the Kubernetes mainline to this externalised CSI driver.
-1. An OPA Gatekeeper to enforce preventative secruity and operational policies (https://github.com/open-policy-agent/gatekeeper). A set of example policies is provided as well - see `gatekeeper-policies/README.md`
+1. An OPA Gatekeeper to enforce preventative security and operational policies (https://github.com/open-policy-agent/gatekeeper). A set of example policies is provided as well - see `gatekeeper-policies/README.md`
 1. The cluster autoscaler (CA) (https://github.com/kubernetes/autoscaler). This will scale your EC2 instances to ensure you have enough capacity to launch all of your Pods as they are deployed/scaled.
 1. The metrics-server (required for the Horizontal Pod Autoscaler (HPA)) (https://github.com/kubernetes-sigs/metrics-server)
 1. The Calico Network Policy Provider (https://docs.aws.amazon.com/eks/latest/userguide/calico.html). This enforces any [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) that you specify.
-1. The AWS Systems Manager (SSM) agent. This allows for various management activities (e.g. Inventory, Patching, Session Mnaager, etc.) of your Instances/Nodes by AWS Systems Manager.
+1. The AWS Systems Manager (SSM) agent. This allows for various management activities (e.g. Inventory, Patching, Session Manager, etc.) of your Instances/Nodes by AWS Systems Manager.
 
 All of the add-ons are optional and you control whether you get them with variables in  `cluster-bootstrap/cdk.json` that you flip to True/False
 
 ### Why Cloud Development Kit (CDK)?
 
-The Cloud Development Kit (CDK) is a tool where you can write infrastucture-as-code with 'actual' code (TypeScript, Python, C#, and Java). This takes these lanugages and 'compiles' them into a CloudFormation template for the AWS CloudFormation engine to then deploy and manage as stacks.
+The Cloud Development Kit (CDK) is a tool where you can write infrastructure-as-code with 'actual' code (TypeScript, Python, C#, and Java). This takes these languages and 'compiles' them into a CloudFormation template for the AWS CloudFormation engine to then deploy and manage as stacks.
 
-When you develop and deploy infrastructure with the CDK you don't edit the intermediate CloudFormation but, instead, let CDK regenerate it in reponse to changes in the upstream CDK code.
+When you develop and deploy infrastructure with the CDK you don't edit the intermediate CloudFormation but, instead, let CDK regenerate it in response to changes in the upstream CDK code.
 
 What makes CDK uniquely good when it comes to our EKS Quickstart is:
 
@@ -48,7 +48,7 @@ What makes CDK uniquely good when it comes to our EKS Quickstart is:
 
 ## Getting started
 
-You can either deploy this from your machine or leverge CodeBuild. The advantage of using CodeBuild is it also sets up a 'GitOps' approach where when you merge changes to
+You can either deploy this from your machine or leverage CodeBuild. The advantage of using CodeBuild is it also sets up a 'GitOps' approach where when you merge changes to
 the cluster-bootstrap folder it'll (re)run `cdk deploy` for you. This means that to update the cluster you just change this file and merge. 
 
 ###  Deploy from CodeBuild
@@ -61,13 +61,13 @@ To use the CodeBuild CloudFormation Template:
 1. Go to the CodeBuild console, click on the Build project that starts with `EKSCodeBuild`, and then click the Start build button.
 1. (Optional) You can click the Tail logs button to follow along with the build process
 
-**_NOTE:_** This also enables a GitOps pattern where changes to the cluster-bootrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `cdk deploy` via web hook.
+**_NOTE:_** This also enables a GitOps pattern where changes to the cluster-bootstrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `cdk deploy` via web hook.
 
 ### Deploy from your laptop
 
 Alternatively, you can deploy from any machine (your laptop, a bastion EC2 instance, etc.).
 
-There are some prerequsistes you likely will need to install on the machine doing your environment bootstrapping including Node, Python, the AWS CLI, the CDK, fluxctl and Helm
+There are some prerequisites you likely will need to install on the machine doing your environment bootstrapping including Node, Python, the AWS CLI, the CDK, fluxctl and Helm
 
 #### Pre-requisites - Ubuntu 20.04.2 LTS (including via Windows 10's WSL)
 
@@ -77,25 +77,25 @@ Run `sudo ./ubuntu-prepreqs.sh`
 
 1. Install Homebrew (https://brew.sh/)
 1. Run `./mac-prereqs.sh`
-1. Edit your `~/.zprofile` and/or your `~/.bash_profile` to put `$(brew --prefix)/opt/python/libexec/bin` at the start of your PATH statement so that the brew things installed take precendence over the built-in often outdated options like python2. You can do this with a `export PATH=/opt/homebrew/opt/python/libexec/bin:$PATH`.
+1. Edit your `~/.zprofile` and/or your `~/.bash_profile` to put `$(brew --prefix)/opt/python/libexec/bin` at the start of your PATH statement so that the brew things installed take precedence over the built-in often outdated options like python2. You can do this with a `export PATH=/opt/homebrew/opt/python/libexec/bin:$PATH`.
 
 #### Deploy from CDK locally
 
 1. Make sure that you have your AWS CLI configured with administrative access to the AWS account in question (e.g. an `aws s3 ls` works)
     1. This can be via setting your access key and secret in your .aws folder via `aws configure` or in your environment variables by copy and pasting from AWS SSO etc.
-1. Run `cd eks-quickstart/cluster-bootstrap`
+1. Run `cd quickstart-eks-cdk-python/cluster-bootstrap`
 2. Run `sudo npm install --upgrade -g aws-cdk` to ensure your CDK is up to date
 3. Run `pip install --upgrade -r requirements.txt` to install the required Python bits of the CDK
 4. Run `export CDK_DEPLOY_REGION=ap-southeast-2` replacing ap-southeast-2 with your region of choice
 5. Run `export CDK_DEPLOY_ACCOUNT=123456789123` replacing 123456789123 with your AWS account number
-6. (Optional) If you want to make an existing IAM User or Role the cluster admin rather than creating a new one then edit `cluster-bootstrap/cdk.json` and comment out the curernt cluster_admin_role and uncomment the one beneath it and fill in the ARN of the User/Role you'd like there.
+6. (Optional) If you want to make an existing IAM User or Role the cluster admin rather than creating a new one then edit `cluster-bootstrap/cdk.json` and comment out the current cluster_admin_role and uncomment the one beneath it and fill in the ARN of the User/Role you'd like there.
 7. (Only required the first time you use the CDK in this account) Run `cdk bootstrap` to create the S3 bucket where it puts the CDK puts its artifacts
 8. (Only required the first time ES in VPC mode is used in this account) Run `aws iam create-service-linked-role --aws-service-name es.amazonaws.com`
 9. Run `cdk deploy --require-approval never`
 
 ### Deploy Open Policy Agent (OPA) Gatekeeper and the policies
 
-By default Gatekeeper and the policies are set to "False". As CDK deploys all the add-ons in parallel adding an admission controller introduced intermittent issues preventing the template from deploying - so you should deploy the cluster first then set these to "True" in `cluster-bootstrap/cdk.json` and re-run the `cdk deploy` after the environmet is up to introduce Gatekeeper.
+By default Gatekeeper and the policies are set to "False". As CDK deploys all the add-ons in parallel adding an admission controller introduced intermittent issues preventing the template from deploying - so you should deploy the cluster first then set these to "True" in `cluster-bootstrap/cdk.json` and re-run the `cdk deploy` after the environment is up to introduce Gatekeeper.
 
 Them, for the sample policies we've deployed Flux to deploy them via GitOps. In order for that to work, though, we'll need to get the SSH key that Flux generated and add it to GitHub to give us the required access.
 
