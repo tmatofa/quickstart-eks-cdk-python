@@ -14,7 +14,7 @@ This Quick Start is a reference architecture and implementation of how you can u
     1. A dedicated new IAM role to create it from. The role that creates the cluster is a permanent, and rather hidden, full admin role that doesn't appear in nor is subject to the aws-auth config map. So, you want a dedicated role explicitly for that purpose like CDK does for you here that you can then restrict access to assume unless you need it (e.g. you lock yourself out of the cluster with by making a mistake in the aws-auth configmap).
         1. Alternatively, you can specify an existing role ARN to make the administrator by flipping to `False` in `create_new_cluster_admin_role` and then putting the arn to use in `existing_admin_role_arn` in `cluster-bootstrap/cdk.json`.
     1. A new Managed Node Group with 3 x m5.large instances spread across 3 Availability Zones.
-        1. You can change the instance type and quantity by changing `eks_node_quantity` and/or `eks_node_instance_type` in `cluster-bootstrap/eks-clustery.py`.
+        1. You can change the instance type and quantity by changing `eks_node_quantity` and/or `eks_node_instance_type` in `cluster-bootstrap/eks-cluster.py`.
     3. All control plane logging to CloudWatch Logs enabled (defaulting to 1 month's retention within CloudWatch Logs).
 1. The AWS Load Balancer Controller (https://kubernetes-sigs.github.io/aws-load-balancer-controller) to allow you to seamlessly use ALBs for Ingress and NLB for Services.
 1. External DNS (https://github.com/kubernetes-sigs/external-dns) to allow you to automatically create/update Route53 entries to point your 'real' names at your Ingresses and Services.
@@ -83,7 +83,7 @@ Run `sudo ./ubuntu-prepreqs.sh`
 
 1. Make sure that you have your AWS CLI configured with administrative access to the AWS account in question (e.g. an `aws s3 ls` works)
     1. This can be via setting your access key and secret in your .aws folder via `aws configure` or in your environment variables by copy and pasting from AWS SSO etc.
-1. Run `cd eks-quickstart/cluster-bootstrap`
+1. Run `cd quickstart-eks-cdk-python/cluster-bootstrap`
 2. Run `sudo npm install --upgrade -g aws-cdk` to ensure your CDK is up to date
 3. Run `pip install --upgrade -r requirements.txt` to install the required Python bits of the CDK
 4. Run `export CDK_DEPLOY_REGION=ap-southeast-2` replacing ap-southeast-2 with your region of choice
