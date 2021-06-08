@@ -689,7 +689,7 @@ class EKSClusterStack(core.Stack):
                 }
             )
             fluentbit_chart.node.add_dependency(fluentbit_service_account)
-            
+
             # Output the Kibana address in our CloudFormation Stack
             core.CfnOutput(
                 self, "KibanaAddress",
@@ -1187,20 +1187,20 @@ class EKSClusterStack(core.Stack):
                     }
                 }
             })
-                
+
         # If you have a 'True' in the deploy_bastion variable at the top of the file we'll deploy
         # a basion server that you can connect to via Systems Manager Session Manager
         if (self.node.try_get_context("deploy_bastion") == "True"):
             # Create an Instance Profile for our Admin Role to assume w/EC2
             cluster_admin_role_instance_profile = iam.CfnInstanceProfile(
                 self, "ClusterAdminRoleInstanceProfile",
-                roles=[cluster_admin_role.role_name] 
+                roles=[cluster_admin_role.role_name]
             )
 
             # Another way into our Bastion is via Systems Manager Session Manager
             if (self.node.try_get_context("create_new_cluster_admin_role") == "True"):
                 cluster_admin_role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
-            
+
             # Create Bastion
             # Get Latest Amazon Linux AMI
             amzn_linux = ec2.MachineImage.latest_amazon_linux(
@@ -1226,13 +1226,13 @@ class EKSClusterStack(core.Stack):
             # Create our EC2 instance for bastion
             bastion_instance = ec2.Instance(
                 self, "BastionInstance",
-                instance_type=ec2.InstanceType("t3.large"),
+                instance_type=ec2.InstanceType(self.node.try_get_context("basiton_node_type")),
                 machine_image=amzn_linux,
                 role=cluster_admin_role,
                 vpc=eks_vpc,
                 vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
                 security_group=bastion_security_group,
-                block_devices=[ec2.BlockDevice(device_name="/dev/xvda", volume=ec2.BlockDeviceVolume.ebs(20))]
+                block_devices=[ec2.BlockDevice(device_name="/dev/xvda", volume=ec2.BlockDeviceVolume.ebs(self.node.try_get_context("basiton_disk_size")))]
             )
 
             # Set up our kubectl and fluxctl
@@ -1247,8 +1247,8 @@ class EKSClusterStack(core.Stack):
             # Wait to deploy Bastion until cluster is up and we're deploying manifests/charts to it
             # This could be any of the charts/manifests I just picked this one at random
             bastion_instance.node.add_dependency(ssm_agent_manifest)
-            
-        
+
+
         if (self.node.try_get_context("deploy_client_vpn") == "True"):
             # Create and upload your client and server certs as per https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual
             # And then put the ARNs for them into the items below
@@ -1270,14 +1270,14 @@ class EKSClusterStack(core.Stack):
                 vpn_security_group,
                 ec2.Port.all_traffic()
             )
-            
+
             if (self.node.try_get_context("deploy_managed_elasticsearch") == "True"):
                 # Add a rule to allow our new SG to talk to Elastic
                 elastic_security_group.add_ingress_rule(
                     vpn_security_group,
                     ec2.Port.all_traffic()
                 )
-            
+
             # Create CloudWatch Log Group and Stream and keep the logs for 1 month
             log_group = logs.LogGroup(
                 self, "VPNLogGroup",
@@ -1360,9 +1360,16 @@ class EKSClusterStack(core.Stack):
             )
 
 app = core.App()
+if app.node.try_get_context("account").strip() != "":
+    account = app.node.try_get_context("account")
+else:
+    account = os.environ.get("CDK_DEPLOY_ACCOUNT", os.environ["CDK_DEFAULT_ACCOUNT"])
+
+if app.node.try_get_context("region").strip() != "":
+    region = app.node.try_get_context("region")
+else:
+    region = os.environ.get("CDK_DEPLOY_REGION", os.environ["CDK_DEFAULT_REGION"])
 # Note that if we didn't pass through the ACCOUNT and REGION from these environment variables that
 # it won't let us create 3 AZs and will only create a max of 2 - even when we ask for 3 in eks_vpc
-eks_cluster_stack = EKSClusterStack(app, "EKSClusterStack", env=core.Environment(
-    account=os.environ.get("CDK_DEPLOY_ACCOUNT", os.environ["CDK_DEFAULT_ACCOUNT"]),
-    region=os.environ.get("CDK_DEPLOY_REGION", os.environ["CDK_DEFAULT_REGION"])))
+eks_cluster_stack = EKSClusterStack(app, "EKSClusterStack", env=core.Environment(account=account, region=region))
 app.synth()
