@@ -1226,13 +1226,13 @@ class EKSClusterStack(core.Stack):
             # Create our EC2 instance for bastion
             bastion_instance = ec2.Instance(
                 self, "BastionInstance",
-                instance_type=ec2.InstanceType(self.node.try_get_context("basiton_node_type")),
+                instance_type=ec2.InstanceType(self.node.try_get_context("bastion_node_type")),
                 machine_image=amzn_linux,
                 role=cluster_admin_role,
                 vpc=eks_vpc,
                 vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
                 security_group=bastion_security_group,
-                block_devices=[ec2.BlockDevice(device_name="/dev/xvda", volume=ec2.BlockDeviceVolume.ebs(self.node.try_get_context("basiton_disk_size")))]
+                block_devices=[ec2.BlockDevice(device_name="/dev/xvda", volume=ec2.BlockDeviceVolume.ebs(self.node.try_get_context("bastion_disk_size")))]
             )
 
             # Set up our kubectl and fluxctl
