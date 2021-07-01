@@ -792,7 +792,7 @@ class EKSClusterStack(core.Stack):
             metricsserver_chart = eks_cluster.add_helm_chart(
                 "metrics-server",
                 chart="metrics-server",
-                version="5.8.12",
+                version="5.8.11",
                 release="metricsserver",
                 repository="https://charts.bitnami.com/bitnami",
                 namespace="kube-system",
