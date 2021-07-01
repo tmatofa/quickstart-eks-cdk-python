@@ -3,7 +3,7 @@ Purpose
 
 Example of how to provision an EKS cluster, create the IAM Roles for Service Accounts (IRSA) mappings,
 and then deploy various common cluster add-ons (AWS LB Controller, ExternalDNS, EBS/EFS CSI Drivers,
-Cluster Autoscaler, AWS Elasticsearch, Prometheus & Grafana, Calico NetworkPolicy enforceement, 
+Cluster Autoscaler, AWS Elasticsearch, Prometheus & Grafana, Calico NetworkPolicy enforcement, 
 OPA Gatekeeper w/example policies, etc.)
 
 NOTE: This pulls many parameters/options for what you'd like from the cdk.json context section.
@@ -338,7 +338,7 @@ class EKSClusterStack(core.Stack):
             awslbcontroller_chart = eks_cluster.add_helm_chart(
                 "aws-load-balancer-controller",
                 chart="aws-load-balancer-controller",
-                version="1.2.0",
+                version="1.2.3",
                 release="awslbcontroller",
                 repository="https://aws.github.io/eks-charts",
                 namespace="kube-system",
@@ -365,7 +365,7 @@ class EKSClusterStack(core.Stack):
 
             # Create the PolicyStatements to attach to the role
             # NOTE that this will give External DNS access to all Route53 zones
-            # For production you'll likely want to replace 'Resourece *' with specific resources
+            # For production you'll likely want to replace 'Resource *' with specific resources
             externaldns_policy_statement_json_1 = {
             "Effect": "Allow",
                 "Action": [
@@ -395,7 +395,7 @@ class EKSClusterStack(core.Stack):
             externaldns_chart = eks_cluster.add_helm_chart(
                 "external-dns",
                 chart="external-dns",
-                version="5.0.2",
+                version="5.1.3",
                 release="externaldns",
                 repository="https://charts.bitnami.com/bitnami",
                 namespace="kube-system",
@@ -455,7 +455,7 @@ class EKSClusterStack(core.Stack):
             awsebscsi_chart = eks_cluster.add_helm_chart(
                 "aws-ebs-csi-driver",
                 chart="aws-ebs-csi-driver",
-                version="1.2.0",
+                version="1.2.3",
                 release="awsebscsidriver",
                 repository="https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
                 namespace="kube-system",
@@ -528,7 +528,7 @@ class EKSClusterStack(core.Stack):
             awsefscsi_chart = eks_cluster.add_helm_chart(
                 "aws-efs-csi-driver",
                 chart="aws-efs-csi-driver",
-                version="2.0.0",
+                version="2.1.3",
                 release="awsefscsidriver",
                 repository="https://kubernetes-sigs.github.io/aws-efs-csi-driver/",
                 namespace="kube-system",
@@ -678,7 +678,7 @@ class EKSClusterStack(core.Stack):
             fluentbit_chart = eks_cluster.add_helm_chart(
                 "fluentbit",
                 chart="fluent-bit",
-                version="0.15.13",
+                version="0.15.15",
                 release="fluent-bit",
                 repository="https://fluent.github.io/helm-charts",
                 namespace="kube-system",
@@ -705,7 +705,7 @@ class EKSClusterStack(core.Stack):
             prometheus_chart = eks_cluster.add_helm_chart(
                 "metrics",
                 chart="kube-prometheus-stack",
-                version="16.1.2",
+                version="16.12.0",
                 release="prometheus",
                 repository="https://prometheus-community.github.io/helm-charts",
                 namespace="kube-system",
@@ -792,7 +792,7 @@ class EKSClusterStack(core.Stack):
             metricsserver_chart = eks_cluster.add_helm_chart(
                 "metrics-server",
                 chart="metrics-server",
-                version="5.8.9",
+                version="5.8.12",
                 release="metricsserver",
                 repository="https://charts.bitnami.com/bitnami",
                 namespace="kube-system",
@@ -1334,7 +1334,7 @@ class EKSClusterStack(core.Stack):
             gatekeeper_chart = eks_cluster.add_helm_chart(
                 "gatekeeper",
                 chart="gatekeeper",
-                version="3.4.0",
+                version="3.6.0-beta.2",
                 release="gatekeeper",
                 repository="https://open-policy-agent.github.io/gatekeeper/charts",
                 namespace="kube-system"
@@ -1346,7 +1346,7 @@ class EKSClusterStack(core.Stack):
             flux_gatekeeper_chart = eks_cluster.add_helm_chart(
                 "flux-gatekeeper",
                 chart="flux",
-                version="1.9.0",
+                version="1.10.0",
                 release="flux-gatekeeper",
                 repository="https://charts.fluxcd.io",
                 namespace="kube-system",
