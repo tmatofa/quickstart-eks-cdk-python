@@ -132,8 +132,8 @@ Once it has created your VPN you then need to configure the client:
 1. Open the AWS VPC Console and go to the Client VPN Endpoints on the left panel
 1. Click the Download Client Configuration button
 1. Edit the downloaded file and add:
-    1. A section at the bottom for the server cert in between <cert> and </cert>
-    1. Then under that a section for the client private key between <key> and </key>
+    1. A section at the bottom for the server cert in between `<cert>` and `</cert>`
+    1. Then under that another section for the client private key between `<key>` and `</key>` under that
 1. Install the AWS Client VPN Client - https://aws.amazon.com/vpn/client-vpn-download/
 1. Create a new profile pointing it at that configuration file
 1. Connect to the VPN
