@@ -461,15 +461,8 @@ class EKSClusterStack(core.Stack):
                 namespace="kube-system",
                 values={
                     "region": self.region,
-                    "enableVolumeScheduling": True,
-                    "enableVolumeResizing": True,
-                    "enableVolumeSnapshot": True,
                     "serviceAccount": {
                         "controller": {
-                            "create": False,
-                            "name": "awsebscsidriver"
-                        },
-                        "snapshot": {
                             "create": False,
                             "name": "awsebscsidriver"
                         }
