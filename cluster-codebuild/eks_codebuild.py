@@ -64,18 +64,6 @@ class EKSCodeBuildStack(core.Stack):
             build_spec=codebuild.BuildSpec.from_source_filename("cluster-bootstrap/buildspec.yml")
         )
 
-        """ 
-        # This triggers CDK assets and therefore a cdk deploy being required defeating the purpose
-        # of this whole thing so going to rethink this one...
-        # Kick off our CodeBuild deployment once on the stack deployment (the webhook will take it from there)
-        CodeBuildObjectResource(
-            self, "CodeBuildObjectResource",
-            codebuild_name=build_project.project_name,
-            codebuild_arn=build_project.project_arn
-        )
-        """
-
-
 app = core.App()
 eks_codebuild_stack = EKSCodeBuildStack(app, "EKSCodeBuildStack")
 app.synth()
