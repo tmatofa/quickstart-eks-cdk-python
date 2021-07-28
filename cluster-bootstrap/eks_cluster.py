@@ -795,12 +795,15 @@ class EKSClusterStack(core.Stack):
             metricsserver_chart = eks_cluster.add_helm_chart(
                 "metrics-server",
                 chart="metrics-server",
-                version="5.8.11",
+                version="5.9.1",
                 release="metricsserver",
                 repository="https://charts.bitnami.com/bitnami",
                 namespace="kube-system",
                 values={
-                    "replicas": 2
+                    "replicas": 2,
+                    "apiService": {
+                        "create": True
+                    }
                 }
             )
 
