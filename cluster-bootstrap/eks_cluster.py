@@ -91,11 +91,40 @@ class EKSClusterStack(core.Stack):
             version=eks.KubernetesVersion.of(self.node.try_get_context("eks_version")),
             default_capacity=0
         )
+        # Output the EKS Cluster Name and Export it
+        core.CfnOutput(
+            self, "EKSClusterName",
+            value=eks_cluster.cluster_name,
+            description="The name of the EKS Cluster",
+            export_name="EKSClusterName"
+        )
+        # Output the EKS Cluster OIDC Issuer and Export it
+        core.CfnOutput(
+            self, "EKSClusterOIDCProviderARN",
+            value=eks_cluster.open_id_connect_provider.open_id_connect_provider_arn,
+            description="The EKS Cluster's OIDC Provider ARN",
+            export_name="EKSClusterOIDCProviderARN"
+        )
+        # Output the EKS Cluster kubectl Role ARN
+        core.CfnOutput(
+            self, "EKSClusterKubectlRoleARN",
+            value=eks_cluster.kubectl_role.role_arn,
+            description="The EKS Cluster's kubectl Role ARN",
+            export_name="EKSClusterKubectlRoleARN"
+        )
+        # Output the EKS Cluster SG ID
+        core.CfnOutput(
+            self, "EKSSGID",
+            value=eks_cluster.kubectl_security_group.security_group_id,
+            description="The EKS Cluster's kubectl SG ID",
+            export_name="EKSSGID"
+        )
 
         # Add a Managed Node Group
         eks_node_group = eks_cluster.add_nodegroup_capacity(
             "cluster-default-ng",
             desired_size=self.node.try_get_context("eks_node_quantity"),
+            max_size=self.node.try_get_context("eks_node_max_quantity"),
             disk_size=self.node.try_get_context("eks_node_disk_size"),
             # The default in CDK is to force upgrades through even if they violate - it is safer to not do that
             force_update=False,
@@ -587,7 +616,11 @@ class EKSClusterStack(core.Stack):
                             "name": "clusterautoscaler"
                         }
                     },
-                    "replicaCount": 2
+                    "replicaCount": 2,
+                    "extraArgs": {
+                        "skip-nodes-with-system-pods": False,
+                        "balance-similar-node-groups": True
+                    }
                 }
             )
             clusterautoscaler_chart.node.add_dependency(clusterautoscaler_service_account)
@@ -1249,6 +1282,8 @@ class EKSClusterStack(core.Stack):
             bastion_instance.user_data.add_commands("curl -o fluxctl https://github.com/fluxcd/flux/releases/download/1.22.1/fluxctl_linux_amd64")
             bastion_instance.user_data.add_commands("chmod +x ./fluxctl")
             bastion_instance.user_data.add_commands("mv ./fluxctl /usr/bin")
+            bastion_instance.user_data.add_commands("curl --silent --location https://rpm.nodesource.com/setup_14.x | bash -")
+            bastion_instance.user_data.add_commands("yum install nodejs git -y")
 
             # Wait to deploy Bastion until cluster is up and we're deploying manifests/charts to it
             # This could be any of the charts/manifests I just picked this one at random
