@@ -69,16 +69,14 @@ metadata:
     #alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     #external-dns.alpha.kubernetes.io/hostname: hello-kubernetes.r53domain.com
 spec:
-  tls:
-  - hosts:
-    - hello-kubernetes.jasonumiker.com
   rules:
   - http:
       paths:
-      - pathType: ImplementationSpecific
-        path: "/*"
+      - path: "/"
+        pathType: Prefix
         backend:
           service:
             name: hello-kubernetes
             port:
               number: 80
+
