@@ -1,6 +1,6 @@
 # EKS CDK Quick Start (in Python)
 
-> **DEVELOPER PREVIEW NOTE:** Thise project is currently available as a preview and should not be considered for production use at this time. 
+> **DEVELOPER PREVIEW NOTE:** This project is currently available as a preview and should not be considered for production use at this time. 
 
 
 This Quick Start is a reference architecture and implementation of how you can use the Cloud Development Kit (CDK) to orchestrate the Elastic Kubernetes Serivce (EKS) to quickly deploy a more complete and "production ready" Kubernetes environment on AWS.
@@ -77,7 +77,6 @@ Run `sudo ./ubuntu-prepreqs.sh`
 
 1. Install Homebrew (https://brew.sh/)
 1. Run `./mac-prereqs.sh`
-1. Edit your `~/.zprofile` and/or your `~/.bash_profile` to put `$(brew --prefix)/opt/python/libexec/bin` at the start of your PATH statement so that the brew things installed take precedence over the built-in often outdated options like python2. You can do this with a `export PATH=/opt/homebrew/opt/python/libexec/bin:$PATH`.
 
 #### Deploy from CDK locally
 
@@ -85,7 +84,7 @@ Run `sudo ./ubuntu-prepreqs.sh`
     1. This can be via setting your access key and secret in your .aws folder via `aws configure` or in your environment variables by copy and pasting from AWS SSO etc.
 1. Run `cd quickstart-eks-cdk-python/cluster-bootstrap`
 2. Run `sudo npm install --upgrade -g aws-cdk` to ensure your CDK is up to date
-3. Run `pip install --upgrade -r requirements.txt` to install the required Python bits of the CDK
+3. Run `pip3 install --upgrade -r requirements.txt` to install the required Python bits of the CDK
 4. Run `export CDK_DEPLOY_REGION=ap-southeast-2` replacing ap-southeast-2 with your region of choice
 5. Run `export CDK_DEPLOY_ACCOUNT=123456789123` replacing 123456789123 with your AWS account number
 6. (Optional) If you want to make an existing IAM User or Role the cluster admin rather than creating a new one then edit `cluster-bootstrap/cdk.json` and comment out the current cluster_admin_role and uncomment the one beneath it and fill in the ARN of the User/Role you'd like there.
