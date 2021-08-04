@@ -827,6 +827,7 @@ class EKSClusterStack(core.Stack):
                     "type": "LoadBalancer"
                 }
             })
+            grafananlb_manifest.node.add_dependency(prometheus_chart)
 
         # Install the metrics-server (required for the HPA)
         if (self.node.try_get_context("deploy_metrics_server") == "True"):
