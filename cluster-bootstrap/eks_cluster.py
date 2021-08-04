@@ -121,8 +121,14 @@ class EKSClusterStack(core.Stack):
         )
 
         # Add a Managed Node Group
+        # If we want spot set node_capacity_type to that
+        if (self.node.try_get_context("eks_node_spot") == "True"):
+            node_capacity_type=eks.CapacityType.SPOT
+        else:
+            node_capacity_type=eks.CapacityType.ON_DEMAND
         eks_node_group = eks_cluster.add_nodegroup_capacity(
             "cluster-default-ng",
+            capacity_type=node_capacity_type,
             desired_size=self.node.try_get_context("eks_node_quantity"),
             max_size=self.node.try_get_context("eks_node_max_quantity"),
             disk_size=self.node.try_get_context("eks_node_disk_size"),
