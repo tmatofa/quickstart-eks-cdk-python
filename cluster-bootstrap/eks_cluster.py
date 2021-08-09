@@ -726,7 +726,10 @@ class EKSClusterStack(core.Stack):
                         "name": "fluentbit"
                     },
                     "config": {
-                        "outputs": "[OUTPUT]\n    Name            es\n    Match           *\n    AWS_Region      "+self.region+"\n    AWS_Auth        On\n    Host            "+es_domain.domain_endpoint+"\n    Port            443\n    TLS             On\n    Replace_Dots    On\n"
+                        "outputs": "[OUTPUT]\n    Name            es\n    Match           *\n"\
+                            "    AWS_Region      "+self.region+"\n    AWS_Auth        On\n"\
+                            "    Host            "+es_domain.domain_endpoint+"\n    Port            443\n"\
+                            "    TLS             On\n    Replace_Dots    On\n    Logstash_Format    On"
                     }
                 }
             )
