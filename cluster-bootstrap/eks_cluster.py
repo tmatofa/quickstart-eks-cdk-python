@@ -20,6 +20,7 @@ from aws_cdk import (
     core
 )
 import os
+import yaml
 
 # Import the custom resource to switch on control plane logging from ekslogs_custom_resource.py
 from ekslogs_custom_resource import EKSLogsObjectResource
@@ -1409,6 +1410,98 @@ class EKSClusterStack(core.Stack):
                     }
                 }
             )
+
+        if (self.node.try_get_context("deploy_cloudwatch_container_insights_metrics") == "True"):
+            # For more info see https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-metrics.html
+
+            # Create the Service Account
+            cw_container_insights_sa = eks_cluster.add_service_account(
+                "cloudwatch-agent",
+                name="cloudwatch-agent",
+                namespace="kube-system"
+            )
+            cw_container_insights_sa.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchAgentServerPolicy"))
+
+            # Set up the settings ConfigMap
+            cw_container_insights_configmap = eks_cluster.add_manifest("CWAgentConfigMap",
+                {
+                    "apiVersion": "v1",
+                    "data": {
+                        "cwagentconfig.json": "{\n  \"logs\": {\n    \"metrics_collected\": {\n      \"kubernetes\": {\n        \"cluster_name\": \"" + eks_cluster.cluster_name + "\",\n        \"metrics_collection_interval\": 60\n      }\n    },\n    \"force_flush_interval\": 5\n  }\n}\n"
+                    },
+                    "kind": "ConfigMap",
+                    "metadata": {
+                        "name": "cwagentconfig",
+                        "namespace": "kube-system"
+                    }
+                }
+            )  
+
+            # Import cloudwatch-agent.yaml to a list of dictionaries and submit them as a manifest to EKS
+            # Read the YAML file
+            cw_agent_yaml_file = open("cloudwatch-agent.yaml", 'r')
+            cw_agent_yaml = list(yaml.load_all(cw_agent_yaml_file, Loader=yaml.FullLoader))
+            cw_agent_yaml_file.close()
+            loop_iteration = 0
+            for value in cw_agent_yaml:
+                #print(value)
+                loop_iteration = loop_iteration + 1
+                manifest_id  = "CWAgent" + str(loop_iteration)
+                eks_cluster.add_manifest(manifest_id,value)
+
+        if (self.node.try_get_context("deploy_cloudwatch_container_insights_logs") == "True"):
+            # Create the Service Account
+            cwlogs_service_account = eks_cluster.add_service_account(
+                "aws-for-fluent-bit-service-account",
+                name="aws-for-fluent-bit",
+                namespace="kube-system"
+            )
+
+            cwlogs_policy_statement_json_1 = {
+            "Effect": "Allow",
+                "Action": [
+                    "logs:PutLogEvents",
+                    "logs:DescribeLogStreams",
+                    "logs:DescribeLogGroups",
+                    "logs:CreateLogStream",
+                    "logs:CreateLogGroup",
+                    "logs:PutRetentionPolicy"
+                ],
+                "Resource": ["*"]
+            }
+
+            # Add the policies to the service account
+            cwlogs_service_account.add_to_policy(iam.PolicyStatement.from_json(cwlogs_policy_statement_json_1))
+
+            # For more info check out https://github.com/aws/eks-charts/tree/master/stable/aws-for-fluent-bit
+            fluentbit_chart_cwlogs = eks_cluster.add_helm_chart(
+                "aws-for-fluent-bit",
+                chart="aws-for-fluent-bit",
+                version="0.1.11",
+                release="aws-for-fluent-bit",
+                repository="https://aws.github.io/eks-charts",
+                namespace="kube-system",
+                values={
+                    "serviceAccount": {
+                        "create": False,
+                        "name": "aws-for-fluent-bit"
+                    },
+                    "cloudWatch": {
+                        "region": self.region,
+                        "logRetentionDays": self.node.try_get_context("cloudwatch_container_insights_logs_retention_days") 
+                    },
+                    "firehose": {
+                        "enabled": False
+                    },
+                    "kinesis": {
+                        "enabled": False
+                    },
+                    "elasticsearch": {
+                        "enabled": False
+                    }
+                }
+            )
+            fluentbit_chart.node.add_dependency(cwlogs_service_account)        
 
 app = core.App()
 if app.node.try_get_context("account").strip() != "":

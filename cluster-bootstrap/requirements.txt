@@ -5,3 +5,4 @@ aws-cdk.aws_iam
 aws-cdk.aws_elasticsearch
 aws_cdk.aws_logs
 aws_cdk.aws_certificatemanager
+pyyaml
