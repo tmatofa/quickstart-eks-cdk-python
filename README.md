@@ -16,6 +16,9 @@ This Quick Start is a reference architecture and implementation of how you can u
         1. This is important as the role that creates the cluster is a permanent, and rather hidden, full admin role that doesn't appear in nor is subject to the `aws-auth` ConfigMap. So you want to treat it like the AWS Root Account for this cluster and only use it if required (e.g. to fix the aws-auth ConfigMap should it become corrupted).
     1. A new dedicated role to Administer it (which *IS* via the `aws-auth` ConfigMap) as per https://docs.aws.amazon.com/eks/latest/userguide/add-user-role.html
         1. Alternatively, you can specify an existing role ARN to make the administrator by flipping to `False` in `create_new_cluster_admin_role` and then putting the arn to use in `existing_admin_role_arn` in `cluster-bootstrap/cdk.json`.
+            1. NOTE that if you bring an existing role that this role will get assigned to the Bastion by default as well (so that the Bastion can manage the cluster). This means that you need to:
+                1. Allow ec2.amazonaws.com to sts:AssumeRole this role (your Bastion)
+                1. Add the Managed Policy `AmazonSSMManagedInstanceCore` to this role (so that your Bastion can register with SSM via this role)
     1. A new Managed Node Group with 2 x m5.large instances spread across 3 Availability Zones.
         1. You can change the instance type and quantity by changing `eks_node_quantity` and/or `eks_node_instance_type` in `cluster-bootstrap/eks-cluster.py`.
         1. You can also have it be via Spot rather than OnDemand by setting `eks_node_spot` to True.
