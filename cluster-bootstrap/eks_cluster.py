@@ -1157,7 +1157,7 @@ class EKSClusterStack(core.Stack):
                     }
                 }
             )
-            fluentbit_chart.node.add_dependency(cwlogs_service_account)        
+            fluentbit_chart_cwlogs.node.add_dependency(cwlogs_service_account)        
 
 app = core.App()
 if app.node.try_get_context("account").strip() != "":
