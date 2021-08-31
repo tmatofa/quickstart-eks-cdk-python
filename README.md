@@ -141,7 +141,7 @@ To access this bastion:
 1. Run `kubectl get nodes` to see that all the tools are there and set up for you.
 
 
-## Set up your Client VPN to access the environment
+## (Optional) Set up your Client VPN to access the environment
 
 If you set `deploy_vpn` to `True` in `cluster-bootstrap/cdk.json` then the template will deploy a Client VPN so that you can securely access the cluster's private VPC subnets from any machine. You'll need this to be able to reach the Kibana for your logs and Grafana for your metrics by default (unless you are using an existing VPC where you have already arranged such connectivity)
 
@@ -164,7 +164,7 @@ You then need to add the EKS cluster to your local kubeconfig by running the com
 
 Then you should be able to run a `kubectl get all -A` and see everything running on your cluster.
 
-## How access to Elasticsearch and Kibana is secured
+## (Optional) How access to Elasticsearch and Kibana if you choose to deploy them
 
 We put the Elasticsearch both in the VPC (i.e. not on the Internet) as well as in its own Security Group - which will give access by default only from our EKS cluster's SG (so that can ship the logs to it) as well as to from our (optional) Client VPN's Security Group to allow us access Kibana when on VPN.
 
@@ -185,7 +185,7 @@ For production use, though, you'd likely want to consider implementing Cognito t
 
 TODO: Walk through how to do a few basic things in Kibana with searching and dashboarding your logs.
 
-## Checking out Grafana and the out-of-the-box metrics dashboards
+## (Optional) How to access Prometheus and Grafana if you choose to deploy them
 
 We have deployed an in-VPC private Network Load Balancer (NLB) to access your Grafana service to visualize the metrics from the Prometheus we've deployed onto the cluster.
 
@@ -204,9 +204,9 @@ There are some default dashboards that ship with this which you can see by going
 
 Within all of these dashboards you can click on names as links and it'll drill down to show you details relevant to that item.
 
-## Deploy some sample apps to explore our new Kubernetes environment and its features
+## Deploy some sample/demo apps to explore our new Kubernetes environment and its features
 
-TODO: Walk through deploying some apps that show off some of the cluster add-ons we've installed
+Various demo application are in the demo-apps folder showing how to use the various features and add-ons installed by this Quick Start. There is a [README](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/demo-apps/README.md) in that folder with more information about them and how to install them.
 
 ## Upgrading your cluster
 
