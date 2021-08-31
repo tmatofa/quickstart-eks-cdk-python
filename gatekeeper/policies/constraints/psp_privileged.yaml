@@ -1,11 +1,11 @@
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sPSPHostNamespace
+kind: K8sPSPPrivilegedContainer
 metadata:
-  name: psp-host-namespace
+  name: psp-privileged-container
   namespace: kube-system
 spec:
   match:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
-    excludedNamespaces: ["kube-system"]
+    excludedNamespaces: ["kube-system","flux-system"]

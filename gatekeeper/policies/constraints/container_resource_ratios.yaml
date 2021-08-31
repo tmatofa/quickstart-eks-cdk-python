@@ -1,11 +1,13 @@
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sPSPPrivilegedContainer
+kind: K8sContainerRatios
 metadata:
-  name: psp-privileged-container
+  name: container-must-meet-ratio
   namespace: kube-system
 spec:
   match:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
-    excludedNamespaces: ["kube-system"]
+    excludedNamespaces: ["kube-system","flux-system"]
+  parameters:
+    ratio: "1"

@@ -1,14 +1,13 @@
-
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sDisallowedTags
+kind: K8sPSPCapabilities
 metadata:
-  name: container-image-must-not-have-latest-tag
+  name: capabilities
   namespace: kube-system
 spec:
   match:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
-    excludedNamespaces: ["kube-system"]
+    excludedNamespaces: ["kube-system","flux-system"]
   parameters:
-    tags: ["latest"]
+    requiredDropCapabilities: ["ALL"]

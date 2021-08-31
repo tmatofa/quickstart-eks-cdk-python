@@ -1,13 +1,14 @@
+
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sContainerRatios
+kind: K8sDisallowedTags
 metadata:
-  name: container-must-meet-ratio
+  name: container-image-must-not-have-latest-tag
   namespace: kube-system
 spec:
   match:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
-    excludedNamespaces: ["kube-system"]
+    excludedNamespaces: ["kube-system","flux-system"]
   parameters:
-    ratio: "1"
+    tags: ["latest"]

@@ -3,12 +3,14 @@
 This is an exmaple set of Gatekeeper Policies that draws from the official [Gatekeeper Library](https://github.com/open-policy-agent/gatekeeper-library) as well as the fields which Kubernetes saw fit to include in its original [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/).
 
 ## How to deploy?
-This can be deployed to a machine that already has Gatekeeper installed via a `kubectl apply --recursive -f gatekeeper-policies` or via GitOps tools, such as Flux or ArgoCD, configured to deploy all the YAML manifests in that folder.
+This can be deployed to a machine that already has Gatekeeper installed via a `kubectl apply -k gatekeeper/policies/constraint-templates/ && kubectl apply -k gatekeeper/policies/constraints/` or via GitOps tools, such as Flux or ArgoCD, configured to deploy all the YAML manifests in that folder.
+
+There are the required manifests in this repository (`gatekeeper-sync.yaml` and `policies-sync.yaml`) as well as instructions for how to deploy this with Flux v2 in the [parent README]().
 
 If you are going to do this with GitOps it is suggested that you fork these templates and constraints and do it from your own git repo(s).
 
 ## How to test it works?
-There is an example that will be blocked by each policy in the `gatekeeper-tests` folder. These policies are derivied from the `allowed.yaml` template, which passes all of the policies, changed to violate just the policy in question. 
+There is an example that will be blocked by each policy in the `gatekeeper/tests` folder. These policies are derivied from the `allowed.yaml` template, which passes all of the policies, changed to violate *just* the policy in question. 
 
 ## What policies are we enforcing by default in our Quickstart?
 

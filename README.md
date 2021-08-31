@@ -108,20 +108,25 @@ Run `sudo ./ubuntu-prereqs.sh`
 8. (Only required the first time Elasticsearch in VPC mode is used in this account) Run `aws iam create-service-linked-role --aws-service-name es.amazonaws.com`
 9. Run `cdk deploy --require-approval never`
 
-### Deploy Open Policy Agent (OPA) Gatekeeper and the policies
+### (Optional) Deploy Open Policy Agent (OPA) Gatekeeper and the policies via Flux v2
 
-By default Gatekeeper and the policies are set to "False". As CDK deploys all the add-ons in parallel adding an admission controller introduced intermittent issues preventing the template from deploying - so you should deploy the cluster first then set these to "True" in `cluster-bootstrap/cdk.json` and re-run the `cdk deploy` after the environment is up to introduce Gatekeeper.
+The `gatekeeper` folder contains the manifests to deploy [Gatekeeper's Helm Chart](https://github.com/open-policy-agent/gatekeeper/tree/master/charts/gatekeeper) as well as an example set of policies to help achieve a much better security and noisy neighbor situation - especially if doing multi-tenancy. See more about these example policies in `gatekeeper/README.md`.
 
-Them, for the sample policies we've deployed Flux to deploy them via GitOps. In order for that to work, though, we'll need to get the SSH key that Flux generated and add it to GitHub to give us the required access.
+This also serves as an example of how to use Flux v2 with EKS.
 
-fluxctl and the required access is set up on the Bastion - if you have deployed that:
+In order to deploy Gatekeeper and the example policies:
+1. Ensure you are on a system where `kubectl` is installed and working against the cluster (like the bastion)
+1. [Install the Flux v2 CLI](https://fluxcd.io/docs/installation/#install-the-flux-cli)
+1. Run `flux install` to install Flux onto the cluster
+1. Change directory into the root of quickstart-eks-cdk-python
+1. Run `kubectl apply -f gatekeeper/gatekeeper-sync.yaml` to install the Gatekeeper Helm Chart w/Flux (as well as enable future GitOps if the main branch of the repo is updated)
+1. Run `flux get all` to see the progress of getting and installing the Gatekeeper Helm Chart
+1. Run `flux create source git gatekeeper --url=https://github.com/aws-quickstart/quickstart-eks-cdk-python --branch=main` to add this repo to Flux as a source
+    1. Alternatively, and perhaps advisably, specify the URL of your git repo you've forked/cloned the projet to instead - as it will trigger GitOps actios going forward when this changes!
+1. Run `kubectl apply -f gatekeeper/policies/policies-sync.yaml` to install the policies with Flux (as well as enable future GitOps if the main branch of the repo is updated)
+1. Run `flux get all` to see all of the Flux items and their reconciliation statuses
 
-1. Connect to the Bastion via Systems Manager Session Manager or code-server
-1. Run `fluxctl identity --k8s-fwd-ns kube-system`
-1. Take the SSH key that has been output and add it to GitHub by following these instructions - https://docs.github.com/en/github/authenticating-to-github/adding-a-new-ssh-key-to-your-github-account
-1. (Optional) If you don't want to wait up to 5 minutes for Flux to sync you can run `fluxctl sync --k8s-fwd-ns kube-system`
-
-TODO: Update this to use Flux v2 which should GA soon.
+If you want to change any of the Gatekeeper Constraints or ConstraitTemplates you just change the YAML and then push/merge it to the repo and branch you indicated above and Flux will them deploy those changes to your cluster via GitOps.
 
 ## Deploy and set up a Bastion based on an EC2 instance accessed securely via Systems Manager's Session Manager
 
