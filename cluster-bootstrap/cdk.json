@@ -15,7 +15,7 @@
         "eks_node_max_quantity": 5,
         "eks_node_disk_size": 20,
         "eks_node_instance_type": "m5.large",
-        "eks_node_ami_version": "1.21.2-20210722",
+        "eks_node_ami_version": "1.21.2-20210826",
         "eks_node_spot": "False",
         "deploy_aws_lb_controller": "True",
         "deploy_external_dns": "True",
