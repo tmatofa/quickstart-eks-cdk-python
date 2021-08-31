@@ -5,7 +5,7 @@ This is an exmaple set of Gatekeeper Policies that draws from the official [Gate
 ## How to deploy?
 This can be deployed to a machine that already has Gatekeeper installed via a `kubectl apply -k gatekeeper/policies/constraint-templates/ && kubectl apply -k gatekeeper/policies/constraints/` or via GitOps tools, such as Flux or ArgoCD, configured to deploy all the YAML manifests in that folder.
 
-There are the required manifests in this repository (`gatekeeper-sync.yaml` and `policies-sync.yaml`) as well as instructions for how to deploy this with Flux v2 in the [parent README]().
+There are the required manifests in this repository (`gatekeeper-sync.yaml` and `policies-sync.yaml`) as well as instructions for how to deploy this with Flux v2 in the [parent README](https://github.com/aws-quickstart/quickstart-eks-cdk-python#optional-deploy-open-policy-agent-opa-gatekeeper-and-the-policies-via-flux-v2).
 
 If you are going to do this with GitOps it is suggested that you fork these templates and constraints and do it from your own git repo(s).
 
