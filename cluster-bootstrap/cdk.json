@@ -42,11 +42,6 @@
         "vpn_client_certificate_arn": "arn:aws:acm:ap-southeast-2:123456789123:certificate/XXX",
         "vpn_server_certificate_arn": "arn:aws:acm:ap-southeast-2:123456789123:certificate/XXX",
         "vpn_client_cidr_block": "10.1.0.0/22",
-        "deploy_opa_gatekeeper": "False",
-        "deploy_gatekeeper_policies": "False",
-        "gatekeeper_policies_git_url": "ssh://git@github.com/aws-quickstart/quickstart-eks-cdk-python",
-        "gatekeeper_policies_git_branch": "main",
-        "gatekeeper_policies_git_path": "gatekeeper-policies",
         "deploy_cloudwatch_container_insights_metrics": "True",
         "deploy_cloudwatch_container_insights_logs": "True",
         "cloudwatch_container_insights_logs_retention_days": 7

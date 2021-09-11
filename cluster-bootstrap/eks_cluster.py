@@ -1036,37 +1036,6 @@ class EKSClusterStack(core.Stack):
             eks_arn=eks_cluster.cluster_arn
         )
 
-        # Install the OPA Gatekeeper
-        if (self.node.try_get_context("deploy_opa_gatekeeper") == "True"):
-            # For more info see https://github.com/open-policy-agent/gatekeeper
-            gatekeeper_chart = eks_cluster.add_helm_chart(
-                "gatekeeper",
-                chart="gatekeeper",
-                version="3.6.0-beta.2",
-                release="gatekeeper",
-                repository="https://open-policy-agent.github.io/gatekeeper/charts",
-                namespace="kube-system"
-            )
-
-        if (self.node.try_get_context("deploy_gatekeeper_policies") == "True"):
-            # For more info see https://github.com/aws-quickstart/quickstart-eks-cdk-python/tree/main/gatekeeper-policies
-            # and https://github.com/fluxcd/flux/tree/master/chart/flux
-            flux_gatekeeper_chart = eks_cluster.add_helm_chart(
-                "flux-gatekeeper",
-                chart="flux",
-                version="1.10.0",
-                release="flux-gatekeeper",
-                repository="https://charts.fluxcd.io",
-                namespace="kube-system",
-                values={
-                    "git": {
-                        "url": self.node.try_get_context("gatekeeper_policies_git_url"),
-                        "branch": self.node.try_get_context("gatekeeper_policies_git_branch"),
-                        "path": self.node.try_get_context("gatekeeper_policies_git_path")
-                    }
-                }
-            )
-
         if (self.node.try_get_context("deploy_cloudwatch_container_insights_metrics") == "True"):
             # For more info see https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-metrics.html
 
