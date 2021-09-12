@@ -1126,7 +1126,93 @@ class EKSClusterStack(core.Stack):
                     }
                 }
             )
-            fluentbit_chart_cwlogs.node.add_dependency(cwlogs_service_account)        
+            fluentbit_chart_cwlogs.node.add_dependency(cwlogs_service_account)
+
+        if (self.node.try_get_context("deploy_sg_for_pods") == "True"):
+            # The EKS Cluster was still defaulting to 1.7.5 on 12/9/21 and SG for Pods requires 1.7.7
+            # Upgrading that to the latest version 1.9.0 via the Helm Chart
+            # If this process somehow breaks the CNI you can repair it manually by following the steps here:
+            # https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html#updating-vpc-cni-add-on
+            # TODO: Move this to the CNI Managed Add-on when that supports flipping the required ENABLE_POD_ENI setting
+
+            # Adopting the existing aws-node resources to Helm
+            patch_types = ["DaemonSet", "ClusterRole", "ClusterRoleBinding"]
+            patches = []
+            for kind in patch_types:
+                patch = eks.KubernetesPatch(
+                    self, "CNI-Patch-"+kind,
+                    cluster=eks_cluster,
+                    resource_name=kind + "/aws-node",
+                    resource_namespace="kube-system",
+                    apply_patch={
+                        "metadata": {
+                            "annotations": {
+                                "meta.helm.sh/release-name": "aws-vpc-cni",
+                                "meta.helm.sh/release-namespace": "kube-system",
+                            },
+                            "labels": {
+                                "app.kubernetes.io/managed-by": "Helm"
+                            }
+                        }
+                    },
+                    restore_patch={},
+                    patch_type=eks.PatchType.STRATEGIC
+                )
+                patches.append(patch)
+
+            # Create the Service Account
+            sg_pods_service_account = eks_cluster.add_service_account(
+                "aws-node",
+                name="aws-node-helm",
+                namespace="kube-system"
+            )
+
+            # Give it the required policies
+            sg_pods_service_account.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKS_CNI_Policy"))
+            #sg_pods_service_account.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKSVPCResourceController"))
+            eks_cluster.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKSVPCResourceController"))
+
+            # Deploy the Helm chart
+            # For more info check out https://github.com/aws/eks-charts/tree/master/stable/aws-vpc-cni
+            # Note that for some regions different account # required - https://docs.aws.amazon.com/eks/latest/userguide/add-ons-images.html 
+            sg_pods_chart = eks_cluster.add_helm_chart(
+                "aws-vpc-cni",
+                chart="aws-vpc-cni",
+                version="1.1.8",
+                release="aws-vpc-cni",
+                repository="https://aws.github.io/eks-charts",
+                namespace="kube-system",
+                values={
+                    "init": {
+                        "image": {
+                            "region": self.region,
+                            "account": "602401143452",
+                        },
+                        "env": {
+                            "DISABLE_TCP_EARLY_DEMUX": True
+                        }
+                    },
+                    "image": {
+                        "region": self.region,
+                        "account": "602401143452"
+                    },
+                    "env": {
+                        "ENABLE_POD_ENI": True
+                    },
+                    "serviceAccount": {
+                        "create": False,
+                        "name": "aws-node-helm"
+                    },
+                    "crd": {
+                        "create": False
+                    },
+                    "originalMatchLabels": True
+                }
+            )
+            #This depends both on the service account and the patches to the existing CNI resources having been done first
+            sg_pods_chart.node.add_dependency(cwlogs_service_account)
+            for patch in patches:
+                sg_pods_chart.node.add_dependency(patch)
 
 app = core.App()
 if app.node.try_get_context("account").strip() != "":

@@ -44,6 +44,7 @@
         "vpn_client_cidr_block": "10.1.0.0/22",
         "deploy_cloudwatch_container_insights_metrics": "True",
         "deploy_cloudwatch_container_insights_logs": "True",
-        "cloudwatch_container_insights_logs_retention_days": 7
+        "cloudwatch_container_insights_logs_retention_days": 7,
+        "deploy_sg_for_pods": "True"
     }
 }

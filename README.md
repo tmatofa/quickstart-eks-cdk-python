@@ -41,8 +41,10 @@ This Quick Start is a reference architecture and implementation of how you can u
     1. The AWS EBS CSI Driver (https://github.com/kubernetes-sigs/aws-ebs-csi-driver). Note that new development on EBS functionality has moved out of the Kubernetes mainline to this externalized CSI driver.
     1. The AWS EFS CSI Driver (https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html). Note that new development on EFS functionality has moved out of the Kubernetes mainline to this externalized CSI driver.
 1. Security and Governance
-    1. (Optional) An OPA Gatekeeper to enforce preventative security and operational policies (https://github.com/open-policy-agent/gatekeeper). A set of example policies is provided as well - see `gatekeeper-policies/README.md`
+    1. Security Groups for Pods (https://docs.aws.amazon.com/eks/latest/userguide/security-groups-for-pods.html). This sets the CNI to provision an full ENI for every Pod and then allows you to define SecurityGroupPolicy documents that tell the CNI which one or more Security Groups to apply to those ENIs based on Kubernetes label selectors.
     1. (Optional) The Calico Network Policy Provider (https://docs.aws.amazon.com/eks/latest/userguide/calico.html). This enforces any [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) that you specify.
+        1. NOTE: Traffic flow to and from pods with associated security groups are not subjected to Calico network policy enforcement and are limited to Amazon EC2 security group enforcement only. Community effort is underway to remove this limitation. But, until then, you have to choose either Security Groups for Pods **OR** Calico/Network Policies. If enabling this then also disable Security Groups for Pods in `cdk.json`. 
+    1. (Optional) An OPA Gatekeeper to enforce preventative security and operational policies (https://github.com/open-policy-agent/gatekeeper). A set of example policies is provided as well - see `gatekeeper-policies/README.md`
 1. Autoscaling
     1. The cluster autoscaler (CA) (https://github.com/kubernetes/autoscaler). This will scale your EC2 instances to ensure you have enough capacity to launch all of your Pods as they are deployed/scaled.
     1. The metrics-server (required for the Horizontal Pod Autoscaler (HPA)) (https://github.com/kubernetes-sigs/metrics-server)
