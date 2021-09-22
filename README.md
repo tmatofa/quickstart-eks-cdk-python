@@ -139,8 +139,8 @@ To access this bastion:
 1. Go to Managed Instances on the left hand navigation pane
 1. Select the instance with the name `EKSClusterStack/CodeServerInstance`
 1. Under the Instance Actions menu on the upper right choose Start Session
-1. You need to run `sudo bash` to get to root's profile where we've set up kubectl
-1. Run `kubectl get nodes` to see that all the tools are there and set up for you.
+1. Run `aws eks update-kubeconfig --name <cluster name> --region <your region> to populate your ~/.kube/config file
+1. Run `kubectl get nodes` to see that all the tools are there and set up for you!
 
 
 ## (Optional) Set up your Client VPN to access the environment
