@@ -20,8 +20,8 @@ spec:
           cpu: 1
           memory: 1Gi
       ports:
-      - containerPort: 8080
-        protocol: TCP
+        - containerPort: 8080
+          protocol: TCP
       securityContext:
         privileged: true
         runAsUser: 101
@@ -30,12 +30,12 @@ spec:
           drop:
             - ALL
       readinessProbe:
-          httpGet:
-            scheme: HTTP
-            path: /index.html
-            port: 8080
+        httpGet:
+          scheme: HTTP
+          path: /index.html
+          port: 8080
       livenessProbe:
-          httpGet:
-            scheme: HTTP
-            path: /index.html
-            port: 8080
+        httpGet:
+          scheme: HTTP
+          path: /index.html
+          port: 8080

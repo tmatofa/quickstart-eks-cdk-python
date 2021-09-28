@@ -20,8 +20,8 @@ spec:
           cpu: 1
           memory: 1Gi
       ports:
-      - containerPort: 8080
-        protocol: TCP
+        - containerPort: 8080
+          protocol: TCP
       securityContext:
         runAsUser: 101
         runAsGroup: 101
@@ -29,12 +29,12 @@ spec:
           add: ["NET_ADMIN", "SYS_TIME"]
         allowPrivilegeEscalation: false
       readinessProbe:
-          httpGet:
-            scheme: HTTP
-            path: /index.html
-            port: 8080
+        httpGet:
+          scheme: HTTP
+          path: /index.html
+          port: 8080
       livenessProbe:
-          httpGet:
-            scheme: HTTP
-            path: /index.html
-            port: 8080
+        httpGet:
+          scheme: HTTP
+          path: /index.html
+          port: 8080

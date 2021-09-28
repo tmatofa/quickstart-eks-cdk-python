@@ -6,6 +6,9 @@ CodeBuild to invoke a cdk deploy of that change.
 
 To provide GitHub credentials run:
 aws codebuild import-source-credentials --server-type GITHUB --auth-type PERSONAL_ACCESS_TOKEN --token <token_value>
+
+NOTE: This pulls many parameters/options for what you'd like from the cdk.json context section.
+Have a look there for many options you can change to customise this template for your environments/needs.
 """
 
 from aws_cdk import (
@@ -15,16 +18,6 @@ from aws_cdk import (
 )
 import os
 
-from codebuild_custom_resource import CodeBuildObjectResource
-
-# The owner of the GitHub repo to pull from and set up a GitOps webhook against
-github_owner = "aws-quickstart"
-
-# The GitHub repo to pull from and set up a GitOps webhook against
-github_repo="quickstart-eks-cdk-python"
-
-# The GitHub branch to pull from and set up a GitOps webhook against
-github_branch = "main"
 
 class EKSCodeBuildStack(core.Stack):
 
@@ -37,18 +30,20 @@ class EKSCodeBuildStack(core.Stack):
             self, "EKSCodeBuildRole",
             assumed_by=iam.ServicePrincipal("codebuild.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("AdministratorAccess")
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "AdministratorAccess")
             ]
         )
 
         # We only want to fire on the master branch and if there is a change in the dockerbuild folder
         git_hub_source = codebuild.Source.git_hub(
-            owner=github_owner,
-            repo=github_repo,
-            branch_or_ref=github_branch,
+            owner=self.node.try_get_context("github_owner"),
+            repo=self.node.try_get_context("github_repo"),
+            branch_or_ref=self.node.try_get_context("github_branch"),
             webhook=True,
             webhook_filters=[
-                codebuild.FilterGroup.in_event_of(codebuild.EventAction.PUSH).and_branch_is(github_branch).and_file_path_is("cluster-bootstrap/*")
+                codebuild.FilterGroup.in_event_of(codebuild.EventAction.PUSH).and_branch_is(
+                    self.node.try_get_context("github_branch")).and_file_path_is("cluster-bootstrap/*")
             ]
         )
 
@@ -61,8 +56,10 @@ class EKSCodeBuildStack(core.Stack):
                 build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
                 compute_type=codebuild.ComputeType.LARGE
             ),
-            build_spec=codebuild.BuildSpec.from_source_filename("cluster-bootstrap/buildspec.yml")
+            build_spec=codebuild.BuildSpec.from_source_filename(
+                "cluster-bootstrap/buildspec.yml")
         )
+
 
 app = core.App()
 eks_codebuild_stack = EKSCodeBuildStack(app, "EKSCodeBuildStack")

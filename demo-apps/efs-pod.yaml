@@ -16,14 +16,14 @@ metadata:
   name: storage-test-efs
 spec:
   containers:
-  - name: "storage-test"
-    image: "ubuntu:latest"
-    command: ["/bin/sleep"]
-    args: ["infinity"]
-    volumeMounts:
-      - name: myefs
-        mountPath: /mnt/test
+    - name: "storage-test"
+      image: "ubuntu:latest"
+      command: ["/bin/sleep"]
+      args: ["infinity"]
+      volumeMounts:
+        - name: myefs
+          mountPath: /mnt/test
   volumes:
-  - name: myefs
-    persistentVolumeClaim:
-      claimName: myefsclaim
+    - name: myefs
+      persistentVolumeClaim:
+        claimName: myefsclaim

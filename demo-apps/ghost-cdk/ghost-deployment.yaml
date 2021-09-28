@@ -16,42 +16,42 @@ spec:
         app: ghost
     spec:
       containers:
-      - name: ghost
-        image: ghost:4.9.4
-        ports:
-        - containerPort: 2368
-        env:
-          - name: database__client
-            value: "mysql"
-          - name: database__connection__host
-            valueFrom:
-              secretKeyRef:
-                name: ghost-database
-                key: host
-          - name: database__connection__user
-            valueFrom:
-              secretKeyRef:
-                name: ghost-database
-                key: username
-          - name: database__connection__password
-            valueFrom:
-              secretKeyRef:
-                name: ghost-database
-                key: password            
-          - name: database__connection__database
-            valueFrom:
-              secretKeyRef:
-                name: ghost-database
-                key: dbname
-        livenessProbe:
-          tcpSocket:
-            port: 2368
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        resources:
-          requests:
-            memory: "1Gi"
-            cpu: "1"
-          limits:
-            memory: "1Gi"
-            cpu: "1"
+        - name: ghost
+          image: ghost:4.9.4
+          ports:
+            - containerPort: 2368
+          env:
+            - name: database__client
+              value: "mysql"
+            - name: database__connection__host
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-database
+                  key: host
+            - name: database__connection__user
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-database
+                  key: username
+            - name: database__connection__password
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-database
+                  key: password
+            - name: database__connection__database
+              valueFrom:
+                secretKeyRef:
+                  name: ghost-database
+                  key: dbname
+          livenessProbe:
+            tcpSocket:
+              port: 2368
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "1"
+            limits:
+              memory: "1Gi"
+              cpu: "1"

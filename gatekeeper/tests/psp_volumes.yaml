@@ -20,8 +20,8 @@ spec:
           cpu: 1
           memory: 1Gi
       ports:
-      - containerPort: 8080
-        protocol: TCP
+        - containerPort: 8080
+          protocol: TCP
       securityContext:
         runAsUser: 101
         runAsGroup: 101
@@ -30,21 +30,21 @@ spec:
             - ALL
         allowPrivilegeEscalation: false
       readinessProbe:
-          httpGet:
-            scheme: HTTP
-            path: /index.html
-            port: 8080
+        httpGet:
+          scheme: HTTP
+          path: /index.html
+          port: 8080
       livenessProbe:
-          httpGet:
-            scheme: HTTP
-            path: /index.html
-            port: 8080
+        httpGet:
+          scheme: HTTP
+          path: /index.html
+          port: 8080
       volumeMounts:
-      - mountPath: /cache
-        name: cache-volume
+        - mountPath: /cache
+          name: cache-volume
   volumes:
-  - name: cache-volume
-    hostPath:
-      path: /tmp # directory location on host
-  - name: demo-vol
-    emptyDir: {}
+    - name: cache-volume
+      hostPath:
+        path: /tmp # directory location on host
+    - name: demo-vol
+      emptyDir: {}

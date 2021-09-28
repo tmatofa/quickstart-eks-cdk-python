@@ -40,6 +40,7 @@ This Quick Start is a reference architecture and implementation of how you can u
 1. CSI Drivers
     1. The AWS EBS CSI Driver (https://github.com/kubernetes-sigs/aws-ebs-csi-driver). Note that new development on EBS functionality has moved out of the Kubernetes mainline to this externalized CSI driver.
     1. The AWS EFS CSI Driver (https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html). Note that new development on EFS functionality has moved out of the Kubernetes mainline to this externalized CSI driver.
+    1. (Optional) Kubernetes Secrets Store CSI Driver (https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_csi_driver.html and https://secrets-store-csi-driver.sigs.k8s.io/)
 1. Security and Governance
     1. Security Groups for Pods (https://docs.aws.amazon.com/eks/latest/userguide/security-groups-for-pods.html). This sets the CNI to provision an full ENI for every Pod and then allows you to define SecurityGroupPolicy documents that tell the CNI which one or more Security Groups to apply to those ENIs based on Kubernetes label selectors.
     1. (Optional) The Calico Network Policy Provider (https://docs.aws.amazon.com/eks/latest/userguide/calico.html). This enforces any [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) that you specify.

@@ -14,12 +14,12 @@ metadata:
   namespace: default
 spec:
   rules:
-  - http:
-      paths:
-      - backend:
-          service:
-            name: ghost
-            port:
-              number: 2368
-        path: /*
-        pathType: ImplementationSpecific
+    - http:
+        paths:
+          - backend:
+              service:
+                name: ghost
+                port:
+                  number: 2368
+            path: /*
+            pathType: ImplementationSpecific

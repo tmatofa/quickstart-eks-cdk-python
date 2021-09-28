@@ -10,6 +10,7 @@ from aws_cdk import (
 import os
 import yaml
 
+
 class GhostStack(core.Stack):
 
     def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
@@ -53,12 +54,14 @@ class GhostStack(core.Stack):
             cluster_name=core.Fn.import_value("EKSClusterName"),
             open_id_connect_provider=eks.OpenIdConnectProvider.from_open_id_connect_provider_arn(
                 self, "EKSClusterOIDCProvider",
-                open_id_connect_provider_arn = core.Fn.import_value("EKSClusterOIDCProviderARN")
+                open_id_connect_provider_arn=core.Fn.import_value(
+                    "EKSClusterOIDCProviderARN")
             ),
             kubectl_role_arn=core.Fn.import_value("EKSClusterKubectlRoleARN"),
             vpc=vpc,
             kubectl_security_group_id=core.Fn.import_value("EKSSGID"),
-            kubectl_private_subnet_ids=[vpc.private_subnets[0].subnet_id, vpc.private_subnets[1].subnet_id]
+            kubectl_private_subnet_ids=[
+                vpc.private_subnets[0].subnet_id, vpc.private_subnets[1].subnet_id]
         )
 
         # Deploy the External Secrets Controller
@@ -71,7 +74,7 @@ class GhostStack(core.Stack):
 
         # Define the policy in JSON
         externalsecrets_policy_statement_json_1 = {
-        "Effect": "Allow",
+            "Effect": "Allow",
             "Action": [
                 "secretsmanager:GetResourcePolicy",
                 "secretsmanager:GetSecretValue",
@@ -84,13 +87,14 @@ class GhostStack(core.Stack):
         }
 
         # Add the policies to the service account
-        externalsecrets_service_account.add_to_policy(iam.PolicyStatement.from_json(externalsecrets_policy_statement_json_1))
+        externalsecrets_service_account.add_to_policy(
+            iam.PolicyStatement.from_json(externalsecrets_policy_statement_json_1))
 
         # Deploy the Helm Chart
         external_secrets_chart = eks_cluster.add_helm_chart(
             "external-secrets",
             chart="kubernetes-external-secrets",
-            version="8.2.2",            
+            version="8.2.2",
             repository="https://external-secrets.github.io/kubernetes-external-secrets/",
             namespace="kube-system",
             values={
@@ -108,7 +112,7 @@ class GhostStack(core.Stack):
         )
 
         # Map in the secret for the ghost DB
-        ghost_external_secret = eks_cluster.add_manifest("GhostExternalSecret",{
+        ghost_external_secret = eks_cluster.add_manifest("GhostExternalSecret", {
             "apiVersion": "kubernetes-client.io/v1",
             "kind": "ExternalSecret",
             "metadata": {
@@ -118,26 +122,26 @@ class GhostStack(core.Stack):
             "spec": {
                 "backendType": "secretsManager",
                 "data": [
-                {
-                    "key": ghost_rds.secret.secret_name,
-                    "name": "password",
-                    "property": "password"
-                },
-                {
-                    "key": ghost_rds.secret.secret_name,
-                    "name": "dbname",
-                    "property": "dbname"
-                },
-                {
-                    "key": ghost_rds.secret.secret_name,
-                    "name": "host",
-                    "property": "host"
-                },
-                {
-                    "key": ghost_rds.secret.secret_name,
-                    "name": "username",
-                    "property": "username"
-                }
+                    {
+                        "key": ghost_rds.secret.secret_name,
+                        "name": "password",
+                        "property": "password"
+                    },
+                    {
+                        "key": ghost_rds.secret.secret_name,
+                        "name": "dbname",
+                        "property": "dbname"
+                    },
+                    {
+                        "key": ghost_rds.secret.secret_name,
+                        "name": "host",
+                        "property": "host"
+                    },
+                    {
+                        "key": ghost_rds.secret.secret_name,
+                        "name": "username",
+                        "property": "username"
+                    }
                 ]
             }
         })
@@ -146,30 +150,37 @@ class GhostStack(core.Stack):
         # Import ghost-deployment.yaml to a dictionary and submit it as a manifest to EKS
         # Read the YAML file
         ghost_deployment_yaml_file = open("ghost-deployment.yaml", 'r')
-        ghost_deployment_yaml = yaml.load(ghost_deployment_yaml_file, Loader=yaml.FullLoader)
+        ghost_deployment_yaml = yaml.load(
+            ghost_deployment_yaml_file, Loader=yaml.FullLoader)
         ghost_deployment_yaml_file.close()
-        #print(ghost_deployment_yaml)
-        ghost_deployment_manifest = eks_cluster.add_manifest("GhostDeploymentManifest",ghost_deployment_yaml)
+        # print(ghost_deployment_yaml)
+        ghost_deployment_manifest = eks_cluster.add_manifest(
+            "GhostDeploymentManifest", ghost_deployment_yaml)
         ghost_deployment_manifest.node.add_dependency(ghost_external_secret)
 
         # Import ghost-service.yaml to a dictionary and submit it as a manifest to EKS
         # Read the YAML file
         ghost_service_yaml_file = open("ghost-service.yaml", 'r')
-        ghost_service_yaml = yaml.load(ghost_service_yaml_file, Loader=yaml.FullLoader)
+        ghost_service_yaml = yaml.load(
+            ghost_service_yaml_file, Loader=yaml.FullLoader)
         ghost_service_yaml_file.close()
-        #print(ghost_service_yaml)
-        eks_cluster.add_manifest("GhostServiceManifest",ghost_service_yaml)
+        # print(ghost_service_yaml)
+        eks_cluster.add_manifest("GhostServiceManifest", ghost_service_yaml)
 
         # Import ghost-ingress.yaml to a dictionary and submit it as a manifest to EKS
         # Read the YAML file
         ghost_ingress_yaml_file = open("ghost-ingress.yaml", 'r')
-        ghost_ingress_yaml = yaml.load(ghost_ingress_yaml_file, Loader=yaml.FullLoader)
+        ghost_ingress_yaml = yaml.load(
+            ghost_ingress_yaml_file, Loader=yaml.FullLoader)
         ghost_ingress_yaml_file.close()
-        #print(ghost_ingress_yaml)
-        eks_cluster.add_manifest("GhostIngressManifest",ghost_ingress_yaml)                
+        # print(ghost_ingress_yaml)
+        eks_cluster.add_manifest("GhostIngressManifest", ghost_ingress_yaml)
+
 
 app = core.App()
-account = os.environ.get("CDK_DEPLOY_ACCOUNT", os.environ["CDK_DEFAULT_ACCOUNT"])
+account = os.environ.get("CDK_DEPLOY_ACCOUNT",
+                         os.environ["CDK_DEFAULT_ACCOUNT"])
 region = os.environ.get("CDK_DEPLOY_REGION", os.environ["CDK_DEFAULT_REGION"])
-ghost_stack = GhostStack(app, "GhostStack", env=core.Environment(account=account, region=region))
+ghost_stack = GhostStack(app, "GhostStack", env=core.Environment(
+    account=account, region=region))
 app.synth()

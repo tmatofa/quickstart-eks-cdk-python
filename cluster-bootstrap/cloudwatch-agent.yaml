@@ -21,7 +21,7 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     resourceNames: ["cwagent-clusterleader"]
-    verbs: ["get","update"]
+    verbs: ["get", "update"]
 
 ---
 kind: ClusterRoleBinding
@@ -60,7 +60,7 @@ spec:
               protocol: UDP
           resources:
             limits:
-              cpu:  200m
+              cpu: 200m
               memory: 200Mi
             requests:
               cpu: 200m
@@ -124,4 +124,4 @@ spec:
           hostPath:
             path: /dev/disk/
       terminationGracePeriodSeconds: 60
-      serviceAccountName: cloudwatch-agent  
+      serviceAccountName: cloudwatch-agent

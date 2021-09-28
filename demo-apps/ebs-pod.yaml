@@ -16,14 +16,14 @@ metadata:
   name: storage-test-ebs
 spec:
   containers:
-  - name: "storage-test"
-    image: "ubuntu:latest"
-    command: ["/bin/sleep"]
-    args: ["infinity"]
-    volumeMounts:
-      - name: myebs
-        mountPath: /mnt/test
+    - name: "storage-test"
+      image: "ubuntu:latest"
+      command: ["/bin/sleep"]
+      args: ["infinity"]
+      volumeMounts:
+        - name: myebs
+          mountPath: /mnt/test
   volumes:
-  - name: myebs
-    persistentVolumeClaim:
-      claimName: myebsclaim
+    - name: myebs
+      persistentVolumeClaim:
+        claimName: myebsclaim

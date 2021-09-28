@@ -7,7 +7,7 @@ Cluster Autoscaler, AWS Elasticsearch, Prometheus & Grafana, Calico NetworkPolic
 OPA Gatekeeper w/example policies, etc.)
 
 NOTE: This pulls many parameters/options for what you'd like from the cdk.json context section.
-Have a look there for many options you can chance to customise this template for your environments/needs.
+Have a look there for many options you can change to customise this template for your environments/needs.
 """
 
 from aws_cdk import (
@@ -16,7 +16,7 @@ from aws_cdk import (
     aws_iam as iam,
     aws_elasticsearch as es,
     aws_logs as logs,
-    aws_certificatemanager as cm,  
+    aws_certificatemanager as cm,
     core
 )
 import os
@@ -24,6 +24,7 @@ import yaml
 
 # Import the custom resource to switch on control plane logging from ekslogs_custom_resource.py
 from ekslogs_custom_resource import EKSLogsObjectResource
+
 
 class EKSClusterStack(core.Stack):
 
@@ -33,11 +34,12 @@ class EKSClusterStack(core.Stack):
         # Either create a new IAM role to administrate the cluster or create a new one
         if (self.node.try_get_context("create_new_cluster_admin_role") == "True"):
             cluster_admin_role = iam.Role(self, "ClusterAdminRole",
-                assumed_by=iam.CompositePrincipal(
-                    iam.AccountRootPrincipal(),
-                    iam.ServicePrincipal("ec2.amazonaws.com")
-                )
-            )
+                                          assumed_by=iam.CompositePrincipal(
+                                              iam.AccountRootPrincipal(),
+                                              iam.ServicePrincipal(
+                                                  "ec2.amazonaws.com")
+                                          )
+                                          )
             cluster_admin_policy_statement_json_1 = {
                 "Effect": "Allow",
                 "Action": [
@@ -45,13 +47,15 @@ class EKSClusterStack(core.Stack):
                 ],
                 "Resource": "*"
             }
-            cluster_admin_role.add_to_policy(iam.PolicyStatement.from_json(cluster_admin_policy_statement_json_1))
+            cluster_admin_role.add_to_policy(
+                iam.PolicyStatement.from_json(cluster_admin_policy_statement_json_1))
         else:
             # You'll also need to add a trust relationship to ec2.amazonaws.com to sts:AssumeRole to this as well
             cluster_admin_role = iam.Role.from_role_arn(self, "ClusterAdminRole",
-                role_arn=self.node.try_get_context("existing_admin_role_arn")
-            )
-    
+                                                        role_arn=self.node.try_get_context(
+                                                            "existing_admin_role_arn")
+                                                        )
+
         # Either create a new VPC with the options below OR import an existing one by name
         if (self.node.try_get_context("create_new_vpc") == "True"):
             eks_vpc = ec2.Vpc(
@@ -68,18 +72,21 @@ class EKSClusterStack(core.Stack):
                     ec2.SubnetConfiguration(
                         subnet_type=ec2.SubnetType.PUBLIC,
                         name="Public",
-                        cidr_mask=self.node.try_get_context("vpc_cidr_mask_public")
-                    ), 
+                        cidr_mask=self.node.try_get_context(
+                            "vpc_cidr_mask_public")
+                    ),
                     # 3 x Private Subnets (1 per AZ) with 256 IPs each for our Nodes and Pods
                     ec2.SubnetConfiguration(
                         subnet_type=ec2.SubnetType.PRIVATE,
                         name="Private",
-                        cidr_mask=self.node.try_get_context("vpc_cidr_mask_private")
+                        cidr_mask=self.node.try_get_context(
+                            "vpc_cidr_mask_private")
                     )
                 ]
-            )   
+            )
         else:
-            eks_vpc = ec2.Vpc.from_lookup(self, 'VPC', vpc_name=self.node.try_get_context("existing_vpc_name"))
+            eks_vpc = ec2.Vpc.from_lookup(
+                self, 'VPC', vpc_name=self.node.try_get_context("existing_vpc_name"))
 
         # Create an EKS Cluster
         eks_cluster = eks.Cluster(
@@ -89,7 +96,8 @@ class EKSClusterStack(core.Stack):
             # Make our cluster's control plane accessible only within our private VPC
             # This means that we'll have to ssh to a jumpbox/bastion or set up a VPN to manage it
             endpoint_access=eks.EndpointAccess.PRIVATE,
-            version=eks.KubernetesVersion.of(self.node.try_get_context("eks_version")),
+            version=eks.KubernetesVersion.of(
+                self.node.try_get_context("eks_version")),
             default_capacity=0
         )
         if (self.node.try_get_context("create_cluster_exports") == "True"):
@@ -125,9 +133,9 @@ class EKSClusterStack(core.Stack):
         # Add a Managed Node Group
         # If we want spot set node_capacity_type to that
         if (self.node.try_get_context("eks_node_spot") == "True"):
-            node_capacity_type=eks.CapacityType.SPOT
+            node_capacity_type = eks.CapacityType.SPOT
         else:
-            node_capacity_type=eks.CapacityType.ON_DEMAND
+            node_capacity_type = eks.CapacityType.ON_DEMAND
         eks_node_group = eks_cluster.add_nodegroup_capacity(
             "cluster-default-ng",
             capacity_type=node_capacity_type,
@@ -136,11 +144,13 @@ class EKSClusterStack(core.Stack):
             disk_size=self.node.try_get_context("eks_node_disk_size"),
             # The default in CDK is to force upgrades through even if they violate - it is safer to not do that
             force_update=False,
-            instance_types=[ec2.InstanceType(self.node.try_get_context("eks_node_instance_type"))],
+            instance_types=[ec2.InstanceType(
+                self.node.try_get_context("eks_node_instance_type"))],
             release_version=self.node.try_get_context("eks_node_ami_version")
         )
-        eks_node_group.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
-        
+        eks_node_group.role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
+
         # AWS Load Balancer Controller
         if (self.node.try_get_context("deploy_aws_lb_controller") == "True"):
             awslbcontroller_service_account = eks_cluster.add_service_account(
@@ -356,15 +366,17 @@ class EKSClusterStack(core.Stack):
                         ],
                         "Resource": "*"
                     }
-                ]             
+                ]
             }
 
             # Attach the necessary permissions
             awslbcontroller_policy = iam.Policy(
                 self, "awslbcontrollerpolicy",
-                document=iam.PolicyDocument.from_json(awslbcontroller_policy_document_json)
+                document=iam.PolicyDocument.from_json(
+                    awslbcontroller_policy_document_json)
             )
-            awslbcontroller_service_account.role.attach_inline_policy(awslbcontroller_policy)
+            awslbcontroller_service_account.role.attach_inline_policy(
+                awslbcontroller_policy)
 
             # Deploy the AWS Load Balancer Controller from the AWS Helm Chart
             # For more info check out https://github.com/aws/eks-charts/tree/master/stable/aws-load-balancer-controller
@@ -386,7 +398,8 @@ class EKSClusterStack(core.Stack):
                     "replicaCount": 2
                 }
             )
-            awslbcontroller_chart.node.add_dependency(awslbcontroller_service_account)
+            awslbcontroller_chart.node.add_dependency(
+                awslbcontroller_service_account)
 
         # External DNS Controller
         if (self.node.try_get_context("deploy_external_dns") == "True"):
@@ -401,7 +414,7 @@ class EKSClusterStack(core.Stack):
             # NOTE that this will give External DNS access to all Route53 zones
             # For production you'll likely want to replace 'Resource *' with specific resources
             externaldns_policy_statement_json_1 = {
-            "Effect": "Allow",
+                "Effect": "Allow",
                 "Action": [
                     "route53:ChangeResourceRecordSets"
                 ],
@@ -421,8 +434,10 @@ class EKSClusterStack(core.Stack):
             }
 
             # Attach the necessary permissions
-            externaldns_service_account.add_to_policy(iam.PolicyStatement.from_json(externaldns_policy_statement_json_1))
-            externaldns_service_account.add_to_policy(iam.PolicyStatement.from_json(externaldns_policy_statement_json_2))
+            externaldns_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(externaldns_policy_statement_json_1))
+            externaldns_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(externaldns_policy_statement_json_2))
 
             # Deploy External DNS from the bitnami Helm chart
             # For more info see https://github.com/bitnami/charts/tree/master/bitnami/external-dns
@@ -448,7 +463,7 @@ class EKSClusterStack(core.Stack):
                     "replicas": 2
                 }
             )
-            externaldns_chart.node.add_dependency(externaldns_service_account)    
+            externaldns_chart.node.add_dependency(externaldns_service_account)
 
         # AWS EBS CSI Driver
         if (self.node.try_get_context("deploy_aws_ebs_csi") == "True"):
@@ -464,154 +479,156 @@ class EKSClusterStack(core.Stack):
                 "Version": "2012-10-17",
                 "Statement": [
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:CreateSnapshot",
-                        "ec2:AttachVolume",
-                        "ec2:DetachVolume",
-                        "ec2:ModifyVolume",
-                        "ec2:DescribeAvailabilityZones",
-                        "ec2:DescribeInstances",
-                        "ec2:DescribeSnapshots",
-                        "ec2:DescribeTags",
-                        "ec2:DescribeVolumes",
-                        "ec2:DescribeVolumesModifications"
-                    ],
-                    "Resource": "*"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:CreateSnapshot",
+                            "ec2:AttachVolume",
+                            "ec2:DetachVolume",
+                            "ec2:ModifyVolume",
+                            "ec2:DescribeAvailabilityZones",
+                            "ec2:DescribeInstances",
+                            "ec2:DescribeSnapshots",
+                            "ec2:DescribeTags",
+                            "ec2:DescribeVolumes",
+                            "ec2:DescribeVolumesModifications"
+                        ],
+                        "Resource": "*"
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:CreateTags"
-                    ],
-                    "Resource": [
-                        "arn:aws:ec2:*:*:volume/*",
-                        "arn:aws:ec2:*:*:snapshot/*"
-                    ],
-                    "Condition": {
-                        "StringEquals": {
-                        "ec2:CreateAction": [
-                            "CreateVolume",
-                            "CreateSnapshot"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:CreateTags"
+                        ],
+                        "Resource": [
+                            "arn:aws:ec2:*:*:volume/*",
+                            "arn:aws:ec2:*:*:snapshot/*"
+                        ],
+                        "Condition": {
+                            "StringEquals": {
+                                "ec2:CreateAction": [
+                                    "CreateVolume",
+                                    "CreateSnapshot"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DeleteTags"
+                        ],
+                        "Resource": [
+                            "arn:aws:ec2:*:*:volume/*",
+                            "arn:aws:ec2:*:*:snapshot/*"
                         ]
-                        }
-                    }
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DeleteTags"
-                    ],
-                    "Resource": [
-                        "arn:aws:ec2:*:*:volume/*",
-                        "arn:aws:ec2:*:*:snapshot/*"
-                    ]
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:CreateVolume"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "aws:RequestTag/ebs.csi.aws.com/cluster": "true"
+                            }
+                        }
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:CreateVolume"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringLike": {
-                        "aws:RequestTag/ebs.csi.aws.com/cluster": "true"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:CreateVolume"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "aws:RequestTag/CSIVolumeName": "*"
+                            }
                         }
-                    }
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:CreateVolume"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringLike": {
-                        "aws:RequestTag/CSIVolumeName": "*"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:CreateVolume"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "aws:RequestTag/kubernetes.io/cluster/*": "owned"
+                            }
                         }
-                    }
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:CreateVolume"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringLike": {
-                        "aws:RequestTag/kubernetes.io/cluster/*": "owned"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DeleteVolume"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "ec2:ResourceTag/ebs.csi.aws.com/cluster": "true"
+                            }
                         }
-                    }
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DeleteVolume"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringLike": {
-                        "ec2:ResourceTag/ebs.csi.aws.com/cluster": "true"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DeleteVolume"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "ec2:ResourceTag/CSIVolumeName": "*"
+                            }
                         }
-                    }
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DeleteVolume"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringLike": {
-                        "ec2:ResourceTag/CSIVolumeName": "*"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DeleteVolume"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "ec2:ResourceTag/kubernetes.io/cluster/*": "owned"
+                            }
                         }
-                    }
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DeleteVolume"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringLike": {
-                        "ec2:ResourceTag/kubernetes.io/cluster/*": "owned"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DeleteSnapshot"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "ec2:ResourceTag/CSIVolumeSnapshotName": "*"
+                            }
                         }
-                    }
                     },
                     {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DeleteSnapshot"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringLike": {
-                        "ec2:ResourceTag/CSIVolumeSnapshotName": "*"
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DeleteSnapshot"
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "ec2:ResourceTag/ebs.csi.aws.com/cluster": "true"
+                            }
                         }
-                    }
-                    },
-                    {
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:DeleteSnapshot"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringLike": {
-                        "ec2:ResourceTag/ebs.csi.aws.com/cluster": "true"
-                        }
-                    }
                     }
                 ]
             }
-            
+
             # Attach the necessary permissions
             awsebscsidriver_policy = iam.Policy(
                 self, "awsebscsidriverpolicy",
-                document=iam.PolicyDocument.from_json(awsebscsidriver_policy_document_json)
+                document=iam.PolicyDocument.from_json(
+                    awsebscsidriver_policy_document_json)
             )
-            awsebscsidriver_service_account.role.attach_inline_policy(awsebscsidriver_policy)
+            awsebscsidriver_service_account.role.attach_inline_policy(
+                awsebscsidriver_policy)
 
             # Install the AWS EBS CSI Driver
             # For more info see https://github.com/kubernetes-sigs/aws-ebs-csi-driver
@@ -634,11 +651,12 @@ class EKSClusterStack(core.Stack):
                         "serviceAccount": {
                             "create": False,
                             "name": "awsefscsidriver"
-                        }    
+                        }
                     }
                 }
             )
-            awsebscsi_chart.node.add_dependency(awsebscsidriver_service_account)
+            awsebscsi_chart.node.add_dependency(
+                awsebscsidriver_service_account)
 
         # AWS EFS CSI Driver
         if (self.node.try_get_context("deploy_aws_efs_csi") == "True"):
@@ -665,7 +683,7 @@ class EKSClusterStack(core.Stack):
                 "Resource": "*",
                 "Condition": {
                     "StringLike": {
-                    "aws:RequestTag/efs.csi.aws.com/cluster": "true"
+                        "aws:RequestTag/efs.csi.aws.com/cluster": "true"
                     }
                 }
             }
@@ -675,15 +693,18 @@ class EKSClusterStack(core.Stack):
                 "Resource": "*",
                 "Condition": {
                     "StringEquals": {
-                    "aws:ResourceTag/efs.csi.aws.com/cluster": "true"
+                        "aws:ResourceTag/efs.csi.aws.com/cluster": "true"
                     }
                 }
             }
 
             # Attach the necessary permissions
-            awsefscsidriver_service_account.add_to_policy(iam.PolicyStatement.from_json(awsefscsidriver_policy_statement_json_1))
-            awsefscsidriver_service_account.add_to_policy(iam.PolicyStatement.from_json(awsefscsidriver_policy_statement_json_2))
-            awsefscsidriver_service_account.add_to_policy(iam.PolicyStatement.from_json(awsefscsidriver_policy_statement_json_3))
+            awsefscsidriver_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(awsefscsidriver_policy_statement_json_1))
+            awsefscsidriver_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(awsefscsidriver_policy_statement_json_2))
+            awsefscsidriver_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(awsefscsidriver_policy_statement_json_3))
 
             # Install the AWS EFS CSI Driver
             # For more info see https://github.com/kubernetes-sigs/aws-efs-csi-driver
@@ -705,11 +726,12 @@ class EKSClusterStack(core.Stack):
                         "serviceAccount": {
                             "create": False,
                             "name": "awsefscsidriver"
-                        }    
+                        }
                     }
                 }
             )
-            awsefscsi_chart.node.add_dependency(awsefscsidriver_service_account)
+            awsefscsi_chart.node.add_dependency(
+                awsefscsidriver_service_account)
 
         # cluster-autoscaler
         if (self.node.try_get_context("deploy_cluster_autoscaler") == "True"):
@@ -734,7 +756,8 @@ class EKSClusterStack(core.Stack):
             }
 
             # Attach the necessary permissions
-            clusterautoscaler_service_account.add_to_policy(iam.PolicyStatement.from_json(clusterautoscaler_policy_statement_json_1))
+            clusterautoscaler_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(clusterautoscaler_policy_statement_json_1))
 
             # Install the Cluster Autoscaler
             # For more info see https://github.com/kubernetes/autoscaler
@@ -763,21 +786,24 @@ class EKSClusterStack(core.Stack):
                     }
                 }
             )
-            clusterautoscaler_chart.node.add_dependency(clusterautoscaler_service_account)
-        
+            clusterautoscaler_chart.node.add_dependency(
+                clusterautoscaler_service_account)
+
         # Deploy a managed Amazon Elasticsearch and a fluent-bit to ship our container logs there
         if (self.node.try_get_context("deploy_managed_elasticsearch") == "True"):
             # Create a new ElasticSearch Domain
-            # NOTE: I changed this to a removal_policy of DESTROY to help cleanup while I was 
-            # developing/iterating on the project. If you comment out that line it defaults to keeping 
+            # NOTE: I changed this to a removal_policy of DESTROY to help cleanup while I was
+            # developing/iterating on the project. If you comment out that line it defaults to keeping
             # the Domain upon deletion of the CloudFormation stack so you won't lose your log data
-            
+
             # The capacity in Nodes and Volume Size/Type for the AWS Elasticsearch
             es_capacity = es.CapacityConfig(
                 data_nodes=self.node.try_get_context("es_data_nodes"),
-                data_node_instance_type=self.node.try_get_context("es_data_node_instance_type"),
+                data_node_instance_type=self.node.try_get_context(
+                    "es_data_node_instance_type"),
                 master_nodes=self.node.try_get_context("es_master_nodes"),
-                master_node_instance_type=self.node.try_get_context("es_master_node_instance_type")
+                master_node_instance_type=self.node.try_get_context(
+                    "es_master_node_instance_type")
             )
             es_ebs = es.EbsOptions(
                 enabled=True,
@@ -819,13 +845,15 @@ class EKSClusterStack(core.Stack):
                 # https://docs.aws.amazon.com/cdk/api/latest/docs/@aws-cdk_aws-elasticsearch.ElasticsearchVersion.html
                 version=es.ElasticsearchVersion.V7_10,
                 vpc=eks_vpc,
-                vpc_subnets=[ec2.SubnetSelection(subnets=[eks_vpc.private_subnets[0]])],
+                vpc_subnets=[ec2.SubnetSelection(
+                    subnets=[eks_vpc.private_subnets[0]])],
                 security_groups=[elastic_security_group],
                 capacity=es_capacity,
                 ebs=es_ebs,
-                access_policies=[iam.PolicyStatement.from_json(es_access_policy_statement_json_1)]
+                access_policies=[iam.PolicyStatement.from_json(
+                    es_access_policy_statement_json_1)]
             )
-            
+
             # Create the Service Account
             fluentbit_service_account = eks_cluster.add_service_account(
                 "fluentbit",
@@ -834,7 +862,7 @@ class EKSClusterStack(core.Stack):
             )
 
             fluentbit_policy_statement_json_1 = {
-            "Effect": "Allow",
+                "Effect": "Allow",
                 "Action": [
                     "es:ESHttp*"
                 ],
@@ -844,7 +872,8 @@ class EKSClusterStack(core.Stack):
             }
 
             # Add the policies to the service account
-            fluentbit_service_account.add_to_policy(iam.PolicyStatement.from_json(fluentbit_policy_statement_json_1))
+            fluentbit_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(fluentbit_policy_statement_json_1))
             es_domain.grant_write(fluentbit_service_account)
 
             # For more info check out https://github.com/fluent/helm-charts/tree/main/charts/fluent-bit
@@ -861,10 +890,10 @@ class EKSClusterStack(core.Stack):
                         "name": "fluentbit"
                     },
                     "config": {
-                        "outputs": "[OUTPUT]\n    Name            es\n    Match           *\n"\
-                            "    AWS_Region      "+self.region+"\n    AWS_Auth        On\n"\
-                            "    Host            "+es_domain.domain_endpoint+"\n    Port            443\n"\
-                            "    TLS             On\n    Replace_Dots    On\n    Logstash_Format    On"
+                        "outputs": "[OUTPUT]\n    Name            es\n    Match           *\n"
+                        "    AWS_Region      "+self.region+"\n    AWS_Auth        On\n"
+                        "    Host            "+es_domain.domain_endpoint+"\n    Port            443\n"
+                        "    TLS             On\n    Replace_Dots    On\n    Logstash_Format    On"
                     }
                 }
             )
@@ -897,7 +926,7 @@ class EKSClusterStack(core.Stack):
                                 "volumeClaimTemplate": {
                                     "spec": {
                                         "accessModes": [
-                                        "ReadWriteOnce"
+                                            "ReadWriteOnce"
                                         ],
                                         "resources": {
                                             "requests": {
@@ -916,7 +945,7 @@ class EKSClusterStack(core.Stack):
                                 "volumeClaimTemplate": {
                                     "spec": {
                                         "accessModes": [
-                                        "ReadWriteOnce"
+                                            "ReadWriteOnce"
                                         ],
                                         "resources": {
                                             "requests": {
@@ -936,11 +965,11 @@ class EKSClusterStack(core.Stack):
                             "size": self.node.try_get_context("prometheus_stack_grafana_disk_size")
                         }
                     }
-                }          
+                }
             )
 
             # Deploy an internal NLB to Grafana
-            grafananlb_manifest = eks_cluster.add_manifest("GrafanaNLB",{
+            grafananlb_manifest = eks_cluster.add_manifest("GrafanaNLB", {
                 "kind": "Service",
                 "apiVersion": "v1",
                 "metadata": {
@@ -953,12 +982,12 @@ class EKSClusterStack(core.Stack):
                 },
                 "spec": {
                     "ports": [
-                    {
-                        "name": "service",
-                        "protocol": "TCP",
-                        "port": 80,
-                        "targetPort": 3000
-                    }
+                        {
+                            "name": "service",
+                            "protocol": "TCP",
+                            "port": 80,
+                            "targetPort": 3000
+                        }
                     ],
                     "selector": {
                         "app.kubernetes.io/name": "grafana"
@@ -992,20 +1021,24 @@ class EKSClusterStack(core.Stack):
 
             # First we need to install the Calico Operator components out of the calico-operator.yaml file
             calico_operator_yaml_file = open("calico-operator.yaml", 'r')
-            calico_operator_yaml = list(yaml.load_all(calico_operator_yaml_file, Loader=yaml.FullLoader))
+            calico_operator_yaml = list(yaml.load_all(
+                calico_operator_yaml_file, Loader=yaml.FullLoader))
             calico_operator_yaml_file.close()
             loop_iteration = 0
             for value in calico_operator_yaml:
-                #print(value)
+                # print(value)
                 loop_iteration = loop_iteration + 1
-                manifest_id  = "CalicoOperator" + str(loop_iteration)
-                calico_operator_manifest = eks_cluster.add_manifest(manifest_id,value)
+                manifest_id = "CalicoOperator" + str(loop_iteration)
+                calico_operator_manifest = eks_cluster.add_manifest(
+                    manifest_id, value)
 
             # Then we need to install the config for the operator out of the calico-crs.yaml file
             calico_crs_yaml_file = open("calico-crs.yaml", 'r')
-            calico_crs_yaml = list(yaml.load_all(calico_crs_yaml_file, Loader=yaml.FullLoader))
+            calico_crs_yaml = list(yaml.load_all(
+                calico_crs_yaml_file, Loader=yaml.FullLoader))
             calico_crs_yaml_file.close()
-            calico_crs_manifest = eks_cluster.add_manifest("CalicoCRS",calico_crs_yaml.pop(0))
+            calico_crs_manifest = eks_cluster.add_manifest(
+                "CalicoCRS", calico_crs_yaml.pop(0))
             calico_crs_manifest.node.add_dependency(calico_operator_manifest)
 
         # Deploy SSM Agent
@@ -1014,14 +1047,15 @@ class EKSClusterStack(core.Stack):
             # Import ssm-agent.yaml to a list of dictionaries and submit them as a manifest to EKS
             # Read the YAML file
             ssm_agent_yaml_file = open("ssm-agent.yaml", 'r')
-            ssm_agent_yaml = list(yaml.load_all(ssm_agent_yaml_file, Loader=yaml.FullLoader))
+            ssm_agent_yaml = list(yaml.load_all(
+                ssm_agent_yaml_file, Loader=yaml.FullLoader))
             ssm_agent_yaml_file.close()
             loop_iteration = 0
             for value in ssm_agent_yaml:
-                #print(value)
+                # print(value)
                 loop_iteration = loop_iteration + 1
-                manifest_id  = "SSMAgent" + str(loop_iteration)
-                eks_cluster.add_manifest(manifest_id,value)
+                manifest_id = "SSMAgent" + str(loop_iteration)
+                eks_cluster.add_manifest(manifest_id, value)
 
         # If you have a 'True' in the deploy_bastion variable at the top of the file we'll deploy
         # a basion server that you can connect to via Systems Manager Session Manager
@@ -1034,7 +1068,8 @@ class EKSClusterStack(core.Stack):
 
             # Another way into our Bastion is via Systems Manager Session Manager
             if (self.node.try_get_context("create_new_cluster_admin_role") == "True"):
-                cluster_admin_role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
+                cluster_admin_role.add_managed_policy(
+                    iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
 
             # Create Bastion
             # Get Latest Amazon Linux AMI
@@ -1043,7 +1078,7 @@ class EKSClusterStack(core.Stack):
                 edition=ec2.AmazonLinuxEdition.STANDARD,
                 virtualization=ec2.AmazonLinuxVirt.HVM,
                 storage=ec2.AmazonLinuxStorage.GENERAL_PURPOSE
-                )
+            )
 
             # Create SecurityGroup for bastion
             bastion_security_group = ec2.SecurityGroup(
@@ -1061,29 +1096,37 @@ class EKSClusterStack(core.Stack):
             # Create our EC2 instance for bastion
             bastion_instance = ec2.Instance(
                 self, "BastionInstance",
-                instance_type=ec2.InstanceType(self.node.try_get_context("bastion_node_type")),
+                instance_type=ec2.InstanceType(
+                    self.node.try_get_context("bastion_node_type")),
                 machine_image=amzn_linux,
                 role=cluster_admin_role,
                 vpc=eks_vpc,
-                vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+                vpc_subnets=ec2.SubnetSelection(
+                    subnet_type=ec2.SubnetType.PUBLIC),
                 security_group=bastion_security_group,
-                block_devices=[ec2.BlockDevice(device_name="/dev/xvda", volume=ec2.BlockDeviceVolume.ebs(self.node.try_get_context("bastion_disk_size")))]
+                block_devices=[ec2.BlockDevice(
+                    device_name="/dev/xvda", volume=ec2.BlockDeviceVolume.ebs(self.node.try_get_context("bastion_disk_size")))]
             )
 
             # Set up our kubectl and fluxctl
-            bastion_instance.user_data.add_commands("curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/kubectl")
+            bastion_instance.user_data.add_commands(
+                "curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/kubectl")
             bastion_instance.user_data.add_commands("chmod +x ./kubectl")
             bastion_instance.user_data.add_commands("mv ./kubectl /usr/bin")
-            bastion_instance.user_data.add_commands("curl -s https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash -")
-            bastion_instance.user_data.add_commands("curl -s https://fluxcd.io/install.sh | bash -")
-            bastion_instance.user_data.add_commands("curl --silent --location https://rpm.nodesource.com/setup_14.x | bash -")
-            bastion_instance.user_data.add_commands("yum install nodejs git -y")
-            bastion_instance.user_data.add_commands("su -c \"aws eks update-kubeconfig --name " + eks_cluster.cluster_name + " --region " + self.region + "\" ssm-user")
+            bastion_instance.user_data.add_commands(
+                "curl -s https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash -")
+            bastion_instance.user_data.add_commands(
+                "curl -s https://fluxcd.io/install.sh | bash -")
+            bastion_instance.user_data.add_commands(
+                "curl --silent --location https://rpm.nodesource.com/setup_14.x | bash -")
+            bastion_instance.user_data.add_commands(
+                "yum install nodejs git -y")
+            bastion_instance.user_data.add_commands(
+                "su -c \"aws eks update-kubeconfig --name " + eks_cluster.cluster_name + " --region " + self.region + "\" ssm-user")
 
             # Wait to deploy Bastion until cluster is up and we're deploying manifests/charts to it
             # This could be any of the charts/manifests I just picked this one as almost everybody will want it
             bastion_instance.node.add_dependency(metricsserver_chart)
-
 
         if (self.node.try_get_context("deploy_client_vpn") == "True"):
             # Create and upload your client and server certs as per https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual
@@ -1130,7 +1173,8 @@ class EKSClusterStack(core.Stack):
                         "clientRootCertificateChainArn": client_cert.certificate_arn
                     }
                 }],
-                client_cidr_block=self.node.try_get_context("vpn_client_cidr_block"),
+                client_cidr_block=self.node.try_get_context(
+                    "vpn_client_cidr_block"),
                 server_certificate_arn=server_cert.certificate_arn,
                 connection_log_options={
                     "enabled": True,
@@ -1173,34 +1217,36 @@ class EKSClusterStack(core.Stack):
                 name="cloudwatch-agent",
                 namespace="kube-system"
             )
-            cw_container_insights_sa.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchAgentServerPolicy"))
+            cw_container_insights_sa.role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchAgentServerPolicy"))
 
             # Set up the settings ConfigMap
             cw_container_insights_configmap = eks_cluster.add_manifest("CWAgentConfigMap",
-                {
-                    "apiVersion": "v1",
-                    "data": {
-                        "cwagentconfig.json": "{\n  \"logs\": {\n    \"metrics_collected\": {\n      \"kubernetes\": {\n        \"cluster_name\": \"" + eks_cluster.cluster_name + "\",\n        \"metrics_collection_interval\": 60\n      }\n    },\n    \"force_flush_interval\": 5\n  }\n}\n"
-                    },
-                    "kind": "ConfigMap",
-                    "metadata": {
-                        "name": "cwagentconfig",
-                        "namespace": "kube-system"
-                    }
-                }
-            )  
+                                                                       {
+                                                                           "apiVersion": "v1",
+                                                                           "data": {
+                                                                               "cwagentconfig.json": "{\n  \"logs\": {\n    \"metrics_collected\": {\n      \"kubernetes\": {\n        \"cluster_name\": \"" + eks_cluster.cluster_name + "\",\n        \"metrics_collection_interval\": 60\n      }\n    },\n    \"force_flush_interval\": 5\n  }\n}\n"
+                                                                           },
+                                                                           "kind": "ConfigMap",
+                                                                           "metadata": {
+                                                                               "name": "cwagentconfig",
+                                                                               "namespace": "kube-system"
+                                                                           }
+                                                                       }
+                                                                       )
 
             # Import cloudwatch-agent.yaml to a list of dictionaries and submit them as a manifest to EKS
             # Read the YAML file
             cw_agent_yaml_file = open("cloudwatch-agent.yaml", 'r')
-            cw_agent_yaml = list(yaml.load_all(cw_agent_yaml_file, Loader=yaml.FullLoader))
+            cw_agent_yaml = list(yaml.load_all(
+                cw_agent_yaml_file, Loader=yaml.FullLoader))
             cw_agent_yaml_file.close()
             loop_iteration = 0
             for value in cw_agent_yaml:
-                #print(value)
+                # print(value)
                 loop_iteration = loop_iteration + 1
-                manifest_id  = "CWAgent" + str(loop_iteration)
-                eks_cluster.add_manifest(manifest_id,value)
+                manifest_id = "CWAgent" + str(loop_iteration)
+                eks_cluster.add_manifest(manifest_id, value)
 
         if (self.node.try_get_context("deploy_cloudwatch_container_insights_logs") == "True"):
             # Create the Service Account
@@ -1211,7 +1257,7 @@ class EKSClusterStack(core.Stack):
             )
 
             cwlogs_policy_statement_json_1 = {
-            "Effect": "Allow",
+                "Effect": "Allow",
                 "Action": [
                     "logs:PutLogEvents",
                     "logs:DescribeLogStreams",
@@ -1224,7 +1270,8 @@ class EKSClusterStack(core.Stack):
             }
 
             # Add the policies to the service account
-            cwlogs_service_account.add_to_policy(iam.PolicyStatement.from_json(cwlogs_policy_statement_json_1))
+            cwlogs_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(cwlogs_policy_statement_json_1))
 
             # For more info check out https://github.com/aws/eks-charts/tree/master/stable/aws-for-fluent-bit
             fluentbit_chart_cwlogs = eks_cluster.add_helm_chart(
@@ -1241,7 +1288,7 @@ class EKSClusterStack(core.Stack):
                     },
                     "cloudWatch": {
                         "region": self.region,
-                        "logRetentionDays": self.node.try_get_context("cloudwatch_container_insights_logs_retention_days") 
+                        "logRetentionDays": self.node.try_get_context("cloudwatch_container_insights_logs_retention_days")
                     },
                     "firehose": {
                         "enabled": False
@@ -1296,13 +1343,15 @@ class EKSClusterStack(core.Stack):
             )
 
             # Give it the required policies
-            sg_pods_service_account.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKS_CNI_Policy"))
-            #sg_pods_service_account.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKSVPCResourceController"))
-            eks_cluster.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKSVPCResourceController"))
+            sg_pods_service_account.role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKS_CNI_Policy"))
+            # sg_pods_service_account.role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKSVPCResourceController"))
+            eks_cluster.role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEKSVPCResourceController"))
 
             # Deploy the Helm chart
             # For more info check out https://github.com/aws/eks-charts/tree/master/stable/aws-vpc-cni
-            # Note that for some regions different account # required - https://docs.aws.amazon.com/eks/latest/userguide/add-ons-images.html 
+            # Note that for some regions different account # required - https://docs.aws.amazon.com/eks/latest/userguide/add-ons-images.html
             sg_pods_chart = eks_cluster.add_helm_chart(
                 "aws-vpc-cni",
                 chart="aws-vpc-cni",
@@ -1337,22 +1386,83 @@ class EKSClusterStack(core.Stack):
                     "originalMatchLabels": True
                 }
             )
-            #This depends both on the service account and the patches to the existing CNI resources having been done first
+            # This depends both on the service account and the patches to the existing CNI resources having been done first
             sg_pods_chart.node.add_dependency(cwlogs_service_account)
             for patch in patches:
                 sg_pods_chart.node.add_dependency(patch)
+
+        if (self.node.try_get_context("deploy_secretsmanager_csi") == "True"):
+            # For more information see https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_csi_driver.html
+
+            # First we install the Secrets Store CSI Driver Helm Chart
+            # For mor information see https://github.com/kubernetes-sigs/secrets-store-csi-driver/tree/main/charts/secrets-store-csi-driver
+            csi_secrets_store_chart = eks_cluster.add_helm_chart(
+                "csi-secrets-store",
+                chart="secrets-store-csi-driver",
+                version="0.3.0",
+                release="csi-secrets-store",
+                repository="https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts",
+                namespace="kube-system",
+                # Since sometimes you want these secrets as environment variables enabling syncSecret
+                # For more info see https://secrets-store-csi-driver.sigs.k8s.io/topics/sync-as-kubernetes-secret.html
+                values={
+                    "syncSecret": {
+                        "enabled": True
+                    }
+                }
+            )
+
+            # Install the AWS Provider
+            # See https://github.com/aws/secrets-store-csi-driver-provider-aws for more info
+
+            # Create the IRSA Mapping
+            secrets_csi_sa = eks_cluster.add_service_account(
+                "secrets-csi-sa",
+                name="csi-secrets-store-provider-aws",
+                namespace="kube-system"
+            )
+
+            # Associate the IAM Policy
+            # NOTE: you really want to specify the secret ARN rather than * in the Resource
+            # Consider namespacing these by cluster/environment name or some such as in this example:
+            # "Resource": ["arn:aws:secretsmanager:Region:AccountId:secret:TestEnv/*"]
+            secrets_csi_policy_statement_json_1 = {
+                "Effect": "Allow",
+                "Action": ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                "Resource": ["*"]
+            }
+            secrets_csi_sa.add_to_policy(iam.PolicyStatement.from_json(
+                secrets_csi_policy_statement_json_1))
+
+            # Deploy the manifests from secrets-store-csi-driver-provider-aws.yaml
+            secrets_csi_provider_yaml_file = open(
+                "secrets-store-csi-driver-provider-aws.yaml", 'r')
+            secrets_csi_provider_yaml = list(yaml.load_all(
+                secrets_csi_provider_yaml_file, Loader=yaml.FullLoader))
+            secrets_csi_provider_yaml_file.close()
+            loop_iteration = 0
+            for value in secrets_csi_provider_yaml:
+                # print(value)
+                loop_iteration = loop_iteration + 1
+                manifest_id = "SecretsCSIProviderManifest" + \
+                    str(loop_iteration)
+                eks_cluster.add_manifest(manifest_id, value)
+
 
 app = core.App()
 if app.node.try_get_context("account").strip() != "":
     account = app.node.try_get_context("account")
 else:
-    account = os.environ.get("CDK_DEPLOY_ACCOUNT", os.environ["CDK_DEFAULT_ACCOUNT"])
+    account = os.environ.get("CDK_DEPLOY_ACCOUNT",
+                             os.environ["CDK_DEFAULT_ACCOUNT"])
 
 if app.node.try_get_context("region").strip() != "":
     region = app.node.try_get_context("region")
 else:
-    region = os.environ.get("CDK_DEPLOY_REGION", os.environ["CDK_DEFAULT_REGION"])
+    region = os.environ.get("CDK_DEPLOY_REGION",
+                            os.environ["CDK_DEFAULT_REGION"])
 # Note that if we didn't pass through the ACCOUNT and REGION from these environment variables that
 # it won't let us create 3 AZs and will only create a max of 2 - even when we ask for 3 in eks_vpc
-eks_cluster_stack = EKSClusterStack(app, "EKSClusterStack", env=core.Environment(account=account, region=region))
+eks_cluster_stack = EKSClusterStack(
+    app, "EKSClusterStack", env=core.Environment(account=account, region=region))
 app.synth()

@@ -20,8 +20,8 @@ spec:
           cpu: 1
           memory: 1Gi
       ports:
-      - containerPort: 8080
-        protocol: TCP
+        - containerPort: 8080
+          protocol: TCP
       securityContext:
         runAsUser: 101
         runAsGroup: 101

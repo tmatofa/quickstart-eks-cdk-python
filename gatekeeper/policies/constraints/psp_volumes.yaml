@@ -8,14 +8,14 @@ spec:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
-    excludedNamespaces: ["kube-system","flux-system"]
+    excludedNamespaces: ["kube-system", "flux-system"]
   parameters:
     volumes:
-    # Allow core volume types
-    - configMap
-    - emptyDir
-    - projected
-    - secret
-    - downwardAPI
-    # Assume that persistentVolumes set up by the cluster admin are safe to use
-    - persistentVolumeClaim
+      # Allow core volume types
+      - configMap
+      - emptyDir
+      - projected
+      - secret
+      - downwardAPI
+      # Assume that persistentVolumes set up by the cluster admin are safe to use
+      - persistentVolumeClaim
