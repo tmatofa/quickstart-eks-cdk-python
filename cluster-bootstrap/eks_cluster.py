@@ -3,7 +3,7 @@ Purpose
 
 Example of how to provision an EKS cluster, create the IAM Roles for Service Accounts (IRSA) mappings,
 and then deploy various common cluster add-ons (AWS LB Controller, ExternalDNS, EBS/EFS CSI Drivers,
-Cluster Autoscaler, AWS Elasticsearch, Prometheus & Grafana, Calico NetworkPolicy enforcement, 
+Cluster Autoscaler, AWS OpenSearch, Prometheus & Grafana, Calico NetworkPolicy enforcement, 
 OPA Gatekeeper w/example policies, etc.)
 
 NOTE: This pulls many parameters/options for what you'd like from the cdk.json context section.
@@ -14,7 +14,7 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_eks as eks,
     aws_iam as iam,
-    aws_elasticsearch as es,
+    aws_opensearchservice as opensearch,
     aws_logs as logs,
     aws_certificatemanager as cm,
     core
@@ -789,29 +789,14 @@ class EKSClusterStack(core.Stack):
             clusterautoscaler_chart.node.add_dependency(
                 clusterautoscaler_service_account)
 
-        # Deploy a managed Amazon Elasticsearch and a fluent-bit to ship our container logs there
-        if (self.node.try_get_context("deploy_managed_elasticsearch") == "True"):
-            # Create a new ElasticSearch Domain
+        # Deploy a managed Amazon OpenSearch and a fluent-bit to ship our container logs there
+        if (self.node.try_get_context("deploy_managed_opensearch") == "True"):
+            # Create a new OpenSearch Domain
             # NOTE: I changed this to a removal_policy of DESTROY to help cleanup while I was
             # developing/iterating on the project. If you comment out that line it defaults to keeping
             # the Domain upon deletion of the CloudFormation stack so you won't lose your log data
 
-            # The capacity in Nodes and Volume Size/Type for the AWS Elasticsearch
-            es_capacity = es.CapacityConfig(
-                data_nodes=self.node.try_get_context("es_data_nodes"),
-                data_node_instance_type=self.node.try_get_context(
-                    "es_data_node_instance_type"),
-                master_nodes=self.node.try_get_context("es_master_nodes"),
-                master_node_instance_type=self.node.try_get_context(
-                    "es_master_node_instance_type")
-            )
-            es_ebs = es.EbsOptions(
-                enabled=True,
-                volume_type=ec2.EbsDeviceVolumeType.GP2,
-                volume_size=self.node.try_get_context("es_ebs_volume_size")
-            )
-
-            es_access_policy_statement_json_1 = {
+            os_access_policy_statement_json_1 = {
                 "Effect": "Allow",
                 "Action": "es:*",
                 "Principal": {
@@ -820,38 +805,55 @@ class EKSClusterStack(core.Stack):
                 "Resource": "*"
             }
 
-            # Create SecurityGroup for Elastic
-            elastic_security_group = ec2.SecurityGroup(
-                self, "ElasticSecurityGroup",
+            # Create SecurityGroup for OpenSearch
+            os_security_group = ec2.SecurityGroup(
+                self, "OpenSearchSecurityGroup",
                 vpc=eks_vpc,
                 allow_all_outbound=True
             )
             # Add a rule to allow our new SG to talk to the EKS control plane
             eks_cluster.cluster_security_group.add_ingress_rule(
-                elastic_security_group,
+                os_security_group,
                 ec2.Port.all_traffic()
             )
             # Add a rule to allow the EKS control plane to talk to our new SG
-            elastic_security_group.add_ingress_rule(
+            os_security_group.add_ingress_rule(
                 eks_cluster.cluster_security_group,
                 ec2.Port.all_traffic()
             )
 
-            # Note that this AWS Elasticsearch domain is optimised for cost rather than availability
+            # The capacity in Nodes and Volume Size/Type for the AWS OpenSearch
+            os_capacity = opensearch.CapacityConfig(
+                data_nodes=self.node.try_get_context("opensearch_data_nodes"),
+                data_node_instance_type=self.node.try_get_context(
+                    "opensearch_data_node_instance_type"),
+                master_nodes=self.node.try_get_context(
+                    "opensearch_master_nodes"),
+                master_node_instance_type=self.node.try_get_context(
+                    "opensearch_master_node_instance_type")
+            )
+            os_ebs = opensearch.EbsOptions(
+                enabled=True,
+                volume_type=ec2.EbsDeviceVolumeType.GP2,
+                volume_size=self.node.try_get_context(
+                    "opensearch_ebs_volume_size")
+            )
+
+            # Note that this AWS OpenSearch domain is optimised for cost rather than availability
             # and defaults to one node in a single availability zone
-            es_domain = es.Domain(
-                self, "ESDomain",
+            os_domain = opensearch.Domain(
+                self, "OSDomain",
                 removal_policy=core.RemovalPolicy.DESTROY,
-                # https://docs.aws.amazon.com/cdk/api/latest/docs/@aws-cdk_aws-elasticsearch.ElasticsearchVersion.html
-                version=es.ElasticsearchVersion.V7_10,
+                # https://docs.aws.amazon.com/cdk/api/latest/docs/@aws-cdk_aws-opensearchservice.EngineVersion.html
+                version=opensearch.EngineVersion.OPENSEARCH_1_0,
                 vpc=eks_vpc,
                 vpc_subnets=[ec2.SubnetSelection(
                     subnets=[eks_vpc.private_subnets[0]])],
-                security_groups=[elastic_security_group],
-                capacity=es_capacity,
-                ebs=es_ebs,
+                security_groups=[os_security_group],
+                capacity=os_capacity,
+                ebs=os_ebs,
                 access_policies=[iam.PolicyStatement.from_json(
-                    es_access_policy_statement_json_1)]
+                    os_access_policy_statement_json_1)]
             )
 
             # Create the Service Account
@@ -867,14 +869,14 @@ class EKSClusterStack(core.Stack):
                     "es:ESHttp*"
                 ],
                 "Resource": [
-                    es_domain.domain_arn
+                    os_domain.domain_arn
                 ]
             }
 
             # Add the policies to the service account
             fluentbit_service_account.add_to_policy(
                 iam.PolicyStatement.from_json(fluentbit_policy_statement_json_1))
-            es_domain.grant_write(fluentbit_service_account)
+            os_domain.grant_write(fluentbit_service_account)
 
             # For more info check out https://github.com/fluent/helm-charts/tree/main/charts/fluent-bit
             fluentbit_chart = eks_cluster.add_helm_chart(
@@ -892,18 +894,18 @@ class EKSClusterStack(core.Stack):
                     "config": {
                         "outputs": "[OUTPUT]\n    Name            es\n    Match           *\n"
                         "    AWS_Region      "+self.region+"\n    AWS_Auth        On\n"
-                        "    Host            "+es_domain.domain_endpoint+"\n    Port            443\n"
+                        "    Host            "+os_domain.domain_endpoint+"\n    Port            443\n"
                         "    TLS             On\n    Replace_Dots    On\n    Logstash_Format    On"
                     }
                 }
             )
             fluentbit_chart.node.add_dependency(fluentbit_service_account)
 
-            # Output the Kibana address in our CloudFormation Stack
+            # Output the OpenSearch Dashboards address in our CloudFormation Stack
             core.CfnOutput(
-                self, "KibanaAddress",
-                value="https://" + es_domain.domain_endpoint + "/_plugin/kibana/",
-                description="Private endpoint for this EKS environment's Kibana to consume the logs",
+                self, "OpenSearchDashboardsAddress",
+                value="https://" + os_domain.domain_endpoint + "/_dashboards/",
+                description="Private endpoint for this EKS environment's OpenSearch to consume the logs",
 
             )
 
@@ -1150,9 +1152,9 @@ class EKSClusterStack(core.Stack):
                 ec2.Port.all_traffic()
             )
 
-            if (self.node.try_get_context("deploy_managed_elasticsearch") == "True"):
+            if (self.node.try_get_context("deploy_managed_opensearch") == "True"):
                 # Add a rule to allow our new SG to talk to Elastic
-                elastic_security_group.add_ingress_rule(
+                os_security_group.add_ingress_rule(
                     vpn_security_group,
                     ec2.Port.all_traffic()
                 )
@@ -1446,7 +1448,8 @@ class EKSClusterStack(core.Stack):
                 loop_iteration = loop_iteration + 1
                 manifest_id = "SecretsCSIProviderManifest" + \
                     str(loop_iteration)
-                eks_cluster.add_manifest(manifest_id, value)
+                manifest = eks_cluster.add_manifest(manifest_id, value)
+                manifest.node.add_dependency(secrets_csi_sa)
 
 
 app = core.App()

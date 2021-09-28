@@ -29,10 +29,10 @@ This Quick Start is a reference architecture and implementation of how you can u
 1. Observability
     1. CloudWatch Container Insights - Metrics
     1. CloudWatch Container Insights - Logs
-    1. (Optional) AWS managed ElasticSearch - Logs 
-        1. If you flip `deploy_managed_elasticsearch` to True this creates a new managed Amazon Elasticsearch Domain behind a private VPC endpoint as well as a fluent-bit DaemonSet to ship all your container logs there - including enriching them with the Kubernetes metadata using the kubernetes fluent-bit filter.
-        1. Note that this provisions a single node 10GB managed Elasticsearch Domain suitable for a proof of concept. To use this in production you'll likely need to edit the `es_capacity` section of `cluster-bootstrap/cdk.json` to scale this out from a capacity and availability perspective. For more information see https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/sizing-domains.html.
-        1. Note that this provisions an Elasticsearch and Kibana that does not have a login/password configured. It is secured instead by network access controlled by it being in a private subnet and its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment, for production use you'd want to consider implementing Cognito to control user access to Kibana - https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam
+    1. (Optional) AWS managed OpenSearch (successor to Elasticsearch) and OpenSearch Dashboards (successor to Kibana) - Logs 
+        1. If you flip `deploy_managed_opensearch` to True this creates a new managed Amazon OpenSearch Domain behind a private VPC endpoint as well as a fluent-bit DaemonSet to ship all your container logs there - including enriching them with the Kubernetes metadata using the kubernetes fluent-bit filter.
+        1. Note that this provisions a single node 10GB managed OpenSearch Domain suitable for a proof of concept. To use this in production you'll likely need to edit the `es_capacity` section of `cluster-bootstrap/cdk.json` to scale this out from a capacity and availability perspective. For more information see https://docs.aws.amazon.com/opensearch-service/latest/developerguide/sizing-domains.html.
+        1. Note that this provisions an OpenSearch and OpenSearch Dashboards that does not have a login/password configured. It is secured instead by network access controlled by it being in a private subnet and its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment, for production use you'd want to consider implementing Cognito to control user access to OpenSearch Dashboards - https://docs.aws.amazon.com/opensearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam.
     1. (Optional) (Temporarily until the AWS Managed Prometheus/Grafana are available) a self-managed Prometheus and Grafana - Metrics
         1. If you flip `deploy_kube_prometheus_operator` to True this will deploy the kube-prometheus Operator (https://github.com/prometheus-operator/kube-prometheus) which deploys you a Prometheus on your cluster that will collect all your cluster metrics as well as a Grafana to visualize them.
         1. You can adjust the disk size of these in `cluster-bootstrap/cdk.json` with `prometheus_disk_size`, `alertmanager_disk_size` and `grafana_disk_size`. 
@@ -108,7 +108,7 @@ Run `sudo ./ubuntu-prereqs.sh`
 5. Run `export CDK_DEPLOY_ACCOUNT=123456789123` replacing 123456789123 with your AWS account number
 6. (Optional) If you want to make an existing IAM User or Role the cluster admin rather than creating a new one then edit `cluster-bootstrap/cdk.json` and comment out the current cluster_admin_role and uncomment the one beneath it and fill in the ARN of the User/Role you'd like there.
 7. (Only required the first time you use the CDK in this account) Run `cdk bootstrap` to create the S3 bucket where it puts the CDK puts its artifacts
-8. (Only required the first time Elasticsearch in VPC mode is used in this account) Run `aws iam create-service-linked-role --aws-service-name es.amazonaws.com`
+8. (Only required the first time OpenSearch in VPC mode is used in this account) Run `aws iam create-service-linked-role --aws-service-name es.amazonaws.com`
 9. Run `cdk deploy --require-approval never`
 
 ### (Optional) Deploy Open Policy Agent (OPA) Gatekeeper and the policies via Flux v2
@@ -146,7 +146,7 @@ To access this bastion:
 
 ## (Optional) Set up your Client VPN to access the environment
 
-If you set `deploy_vpn` to `True` in `cluster-bootstrap/cdk.json` then the template will deploy a Client VPN so that you can securely access the cluster's private VPC subnets from any machine. You'll need this to be able to reach the Kibana for your logs and Grafana for your metrics by default (unless you are using an existing VPC where you have already arranged such connectivity)
+If you set `deploy_vpn` to `True` in `cluster-bootstrap/cdk.json` then the template will deploy a Client VPN so that you can securely access the cluster's private VPC subnets from any machine. You'll need this to be able to reach the OpenSearch Dashboards for your logs and Grafana for your metrics by default (unless you are using an existing VPC where you have already arranged such connectivity)
 
 Note that you'll also need to create client and server certificates and upload them to ACM by following these instructions - https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual - and update `ekscluster.py` with the certificate ARNs for this to work.
 
@@ -167,26 +167,31 @@ You then need to add the EKS cluster to your local kubeconfig by running the com
 
 Then you should be able to run a `kubectl get all -A` and see everything running on your cluster.
 
-## (Optional) How access to Elasticsearch and Kibana if you choose to deploy them
+## (Optional) How access to OpenSearch and OpenSearch Dashboards if you choose to deploy them
 
-We put the Elasticsearch both in the VPC (i.e. not on the Internet) as well as in its own Security Group - which will give access by default only from our EKS cluster's SG (so that can ship the logs to it) as well as to from our (optional) Client VPN's Security Group to allow us access Kibana when on VPN.
+We put the OpenSearch both in the VPC (i.e. not on the Internet) as well as in its own Security Group - which will give access by default only from our EKS cluster's SG (so that can ship the logs to it) as well as to from our (optional) Client VPN's Security Group to allow us access OpenSearch Dashboards when on VPN.
 
-Since this ElasticSearch can only be reached if you are both within the private VPC network *and* allowed by this Security Group, then it is low risk to allow 'open access' to it - especially in a Proof of Concept (POC) environment. As such, we've configured its default access policy so that no login and password and are required - choosing to control access to it from a network perspective instead.
+Since this OpenSearch can only be reached if you are both within the private VPC network *and* allowed by this Security Group, then it is low risk to allow 'open access' to it - especially in a Proof of Concept (POC) environment. As such, we've configured its default access policy so that no login and password and are required - choosing to control access to it from a network perspective instead.
 
-For production use, though, you'd likely want to consider implementing Cognito to facilitate authentication/authorization for user access to Kibana - https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam
+For production use, though, you'd likely want to consider implementing Cognito to facilitate authentication/authorization for user access to OpenSearch Dashboards - https://docs.aws.amazon.com/opensearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam
 
-### Connect to Kibana and do initial setup
+### Connect to OpenSearch Dashboards and do initial setup
 
-1. Once that new access policy has applied click on the Kibana link on the Elasticsearch Domain's Overview Tab
-1. Click "Explore on my own" in the Welcome page
-1. Click "Connect to your Elasticsearch index" under "Use Elasticsearch Data"
-1. Close the About index patterns box
-1. Click the Create Index Pattern button
-1. In the Index pattern name box enter `fluent-bit*` and click Next step
-1. Pick @timestamp from the dropdown box and click Create index pattern
-1. Then go back Home and click Discover
+1. Connect to the Client VPN or ensure that you have private network connectivity to the OpenSearch (site-to-site VPN, DirectConnect, etc.)
+1. Go to the OpenSearch service in the AWS Console
+1. Click on the Domain name
+1. Click on the link next to `OpenSearch Dashboards`
+1. Click the `Explore on my own` link
+1. Click the OpenSearch Dashboards blue box / link in the center of the page
+1. Click the blue `Add your data` button
+1. Click the blue `Create index pattern` button
+1. In the Index pattern name box enter `logstash-*` and click Next step
+1. Pick `@timestamp` from the dropdown box and click the `Create index pattern` button
+1. Then click the Hamburger menu in the upper left and choose `Discover`
 
-TODO: Walk through how to do a few basic things in Kibana with searching and dashboarding your logs.
+You should see all of your logs.
+
+TODO: Document how to do a few basic things here re: searching, filtering and visualising your logs
 
 ## (Optional) How to access Prometheus and Grafana if you choose to deploy them
 
