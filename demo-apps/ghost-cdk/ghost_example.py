@@ -64,52 +64,54 @@ class GhostStack(core.Stack):
                 vpc.private_subnets[0].subnet_id, vpc.private_subnets[1].subnet_id]
         )
 
-        # Deploy the External Secrets Controller
-        # Create the Service Account
-        externalsecrets_service_account = eks_cluster.add_service_account(
-            "kubernetes-external-secrets",
-            name="kubernetes-external-secrets",
-            namespace="kube-system"
-        )
+        if (self.node.try_get_context("deploy_external_secrets") == "True"):
+            # Deploy the External Secrets Controller
+            # Create the Service Account
+            externalsecrets_service_account = eks_cluster.add_service_account(
+                "kubernetes-external-secrets",
+                name="kubernetes-external-secrets",
+                namespace="kube-system"
+            )
 
-        # Define the policy in JSON
-        externalsecrets_policy_statement_json_1 = {
-            "Effect": "Allow",
-            "Action": [
-                "secretsmanager:GetResourcePolicy",
-                "secretsmanager:GetSecretValue",
-                "secretsmanager:DescribeSecret",
-                "secretsmanager:ListSecretVersionIds"
-            ],
-            "Resource": [
-                "*"
-            ]
-        }
-
-        # Add the policies to the service account
-        externalsecrets_service_account.add_to_policy(
-            iam.PolicyStatement.from_json(externalsecrets_policy_statement_json_1))
-
-        # Deploy the Helm Chart
-        external_secrets_chart = eks_cluster.add_helm_chart(
-            "external-secrets",
-            chart="kubernetes-external-secrets",
-            version="8.2.2",
-            repository="https://external-secrets.github.io/kubernetes-external-secrets/",
-            namespace="kube-system",
-            values={
-                "env": {
-                    "AWS_REGION": self.region
-                },
-                "serviceAccount": {
-                    "name": "kubernetes-external-secrets",
-                    "create": False
-                },
-                "securityContext": {
-                    "fsGroup": 65534
-                }
+            # Define the policy in JSON
+            externalsecrets_policy_statement_json_1 = {
+                "Effect": "Allow",
+                "Action": [
+                    "secretsmanager:GetResourcePolicy",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:ListSecretVersionIds"
+                ],
+                "Resource": [
+                    "*"
+                ]
             }
-        )
+
+            # Add the policies to the service account
+            externalsecrets_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(externalsecrets_policy_statement_json_1))
+
+            # Deploy the Helm Chart
+            external_secrets_chart = eks_cluster.add_helm_chart(
+                "external-secrets",
+                chart="kubernetes-external-secrets",
+                version="8.3.0",
+                repository="https://external-secrets.github.io/kubernetes-external-secrets/",
+                namespace="kube-system",
+                release="external-secrets",
+                values={
+                    "env": {
+                        "AWS_REGION": self.region
+                    },
+                    "serviceAccount": {
+                        "name": "kubernetes-external-secrets",
+                        "create": False
+                    },
+                    "securityContext": {
+                        "fsGroup": 65534
+                    }
+                }
+            )
 
         # Map in the secret for the ghost DB
         ghost_external_secret = eks_cluster.add_manifest("GhostExternalSecret", {
@@ -145,7 +147,8 @@ class GhostStack(core.Stack):
                 ]
             }
         })
-        ghost_external_secret.node.add_dependency(external_secrets_chart)
+        if (self.node.try_get_context("deploy_external_secrets") == "True"):
+            ghost_external_secret.node.add_dependency(external_secrets_chart)
 
         # Import ghost-deployment.yaml to a dictionary and submit it as a manifest to EKS
         # Read the YAML file

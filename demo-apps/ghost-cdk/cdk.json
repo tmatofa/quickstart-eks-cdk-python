@@ -1,6 +1,7 @@
 {
     "app": "python3 ghost_example.py",
     "context": {
-        "@aws-cdk/aws-secretsmanager:parseOwnedSecretName": true
+        "@aws-cdk/aws-secretsmanager:parseOwnedSecretName": true,
+        "deploy_external_secrets": false
     }
 }

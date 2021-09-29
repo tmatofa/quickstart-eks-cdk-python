@@ -71,6 +71,7 @@ Now to use the EFS CSI Driver within Kubernetes:
 1. Note that the EFS CSI Driver created a path for this PersistentVolumeClaim in the volume tied to an EFS Access Point to control access to that path for us automatically.
 
 ## Ghost
+Note that this requires the Kubernetes External Secrets Opeartor (https://github.com/external-secrets/kubernetes-external-secrets). This is an optional part of the Quick Start so you can enable it there. Alternatively, you can flip `deploy_external_secrets` to true in `cdk.json` to true and this CDK example will deploy it for you as well. 
 
 To deploy our CDK-based Ghost example:
 1. `cd ghost-cdk`

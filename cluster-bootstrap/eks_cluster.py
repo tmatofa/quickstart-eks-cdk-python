@@ -100,6 +100,17 @@ class EKSClusterStack(core.Stack):
                 self.node.try_get_context("eks_version")),
             default_capacity=0
         )
+
+        # Enable control plane logging (via ekslogs_custom_resource.py)
+        # This requires a custom resource until that has CloudFormation Support
+        # TODO: remove this when no longer required when CF support launches
+        EKSLogsObjectResource(
+            self, "EKSLogsObjectResource",
+            eks_name=eks_cluster.cluster_name,
+            eks_arn=eks_cluster.cluster_arn
+        )
+
+        # Create the CF exports that let you rehydrate the Cluster object in other stack(s)
         if (self.node.try_get_context("create_cluster_exports") == "True"):
             # Output the EKS Cluster Name and Export it
             core.CfnOutput(
@@ -131,9 +142,10 @@ class EKSClusterStack(core.Stack):
             )
 
         # Add a Managed Node Group
-        # If we want spot set node_capacity_type to that
+        # If we enabled spot then use that
         if (self.node.try_get_context("eks_node_spot") == "True"):
             node_capacity_type = eks.CapacityType.SPOT
+        # Otherwise give us OnDemand
         else:
             node_capacity_type = eks.CapacityType.ON_DEMAND
         eks_node_group = eks_cluster.add_nodegroup_capacity(
@@ -733,7 +745,7 @@ class EKSClusterStack(core.Stack):
             awsefscsi_chart.node.add_dependency(
                 awsefscsidriver_service_account)
 
-        # cluster-autoscaler
+        # Cluster Autoscaler
         if (self.node.try_get_context("deploy_cluster_autoscaler") == "True"):
             clusterautoscaler_service_account = eks_cluster.add_service_account(
                 "clusterautoscaler",
@@ -789,7 +801,7 @@ class EKSClusterStack(core.Stack):
             clusterautoscaler_chart.node.add_dependency(
                 clusterautoscaler_service_account)
 
-        # Deploy a managed Amazon OpenSearch and a fluent-bit to ship our container logs there
+        # Amazon OpenSearch and a fluent-bit to ship our container logs there
         if (self.node.try_get_context("deploy_managed_opensearch") == "True"):
             # Create a new OpenSearch Domain
             # NOTE: I changed this to a removal_policy of DESTROY to help cleanup while I was
@@ -909,7 +921,7 @@ class EKSClusterStack(core.Stack):
 
             )
 
-        # Deploy Self-Managed Prometheus and Grafana from the community Prometheus Stack
+        # Self-Managed Prometheus and Grafana from the community Prometheus Stack
         if (self.node.try_get_context("deploy_kube_prometheus_stack") == "True"):
             # TODO Replace this with the new AWS Managed Prometheus and Grafana when it is Generally Available (GA)
             # For more information see https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
@@ -999,7 +1011,7 @@ class EKSClusterStack(core.Stack):
             })
             grafananlb_manifest.node.add_dependency(prometheus_chart)
 
-        # Install the metrics-server (required for the HPA)
+        # Metrics Server (required for the Horizontal Pod Autoscaler (HPA))
         if (self.node.try_get_context("deploy_metrics_server") == "True"):
             # For more info see https://github.com/bitnami/charts/tree/master/bitnami/metrics-server
             metricsserver_chart = eks_cluster.add_helm_chart(
@@ -1017,7 +1029,7 @@ class EKSClusterStack(core.Stack):
                 }
             )
 
-        # Install Calico to enforce NetworkPolicies
+        # Calico to enforce NetworkPolicies
         if (self.node.try_get_context("deploy_calico_np") == "True"):
             # For more info see https://docs.aws.amazon.com/eks/latest/userguide/calico.html
 
@@ -1043,7 +1055,7 @@ class EKSClusterStack(core.Stack):
                 "CalicoCRS", calico_crs_yaml.pop(0))
             calico_crs_manifest.node.add_dependency(calico_operator_manifest)
 
-        # Deploy SSM Agent
+        # SSM Agent
         if (self.node.try_get_context("deploy_ssm_agent") == "True"):
             # For more information see https://github.com/aws-samples/ssm-agent-daemonset-installer
             # Import ssm-agent.yaml to a list of dictionaries and submit them as a manifest to EKS
@@ -1059,8 +1071,7 @@ class EKSClusterStack(core.Stack):
                 manifest_id = "SSMAgent" + str(loop_iteration)
                 eks_cluster.add_manifest(manifest_id, value)
 
-        # If you have a 'True' in the deploy_bastion variable at the top of the file we'll deploy
-        # a basion server that you can connect to via Systems Manager Session Manager
+        # Bastion Instance
         if (self.node.try_get_context("deploy_bastion") == "True"):
             # Create an Instance Profile for our Admin Role to assume w/EC2
             cluster_admin_role_instance_profile = iam.CfnInstanceProfile(
@@ -1130,6 +1141,7 @@ class EKSClusterStack(core.Stack):
             # This could be any of the charts/manifests I just picked this one as almost everybody will want it
             bastion_instance.node.add_dependency(metricsserver_chart)
 
+        # Client VPN
         if (self.node.try_get_context("deploy_client_vpn") == "True"):
             # Create and upload your client and server certs as per https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual
             # And then put the ARNs for them into the items below
@@ -1202,14 +1214,7 @@ class EKSClusterStack(core.Stack):
                 subnet_id=eks_vpc.private_subnets[0].subnet_id
             )
 
-        # Enable control plane logging which requires a Custom Resource until it has proper
-        # CloudFormation support that CDK can leverage
-        EKSLogsObjectResource(
-            self, "EKSLogsObjectResource",
-            eks_name=eks_cluster.cluster_name,
-            eks_arn=eks_cluster.cluster_arn
-        )
-
+        # CloudWatch Container Insights - Metrics
         if (self.node.try_get_context("deploy_cloudwatch_container_insights_metrics") == "True"):
             # For more info see https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-metrics.html
 
@@ -1250,6 +1255,7 @@ class EKSClusterStack(core.Stack):
                 manifest_id = "CWAgent" + str(loop_iteration)
                 eks_cluster.add_manifest(manifest_id, value)
 
+        # CloudWatch Container Insights - Logs
         if (self.node.try_get_context("deploy_cloudwatch_container_insights_logs") == "True"):
             # Create the Service Account
             cwlogs_service_account = eks_cluster.add_service_account(
@@ -1305,6 +1311,7 @@ class EKSClusterStack(core.Stack):
             )
             fluentbit_chart_cwlogs.node.add_dependency(cwlogs_service_account)
 
+        # Security Group for Pods
         if (self.node.try_get_context("deploy_sg_for_pods") == "True"):
             # The EKS Cluster was still defaulting to 1.7.5 on 12/9/21 and SG for Pods requires 1.7.7
             # Upgrading that to the latest version 1.9.0 via the Helm Chart
@@ -1393,6 +1400,7 @@ class EKSClusterStack(core.Stack):
             for patch in patches:
                 sg_pods_chart.node.add_dependency(patch)
 
+        # Secrets Manager CSI Driver
         if (self.node.try_get_context("deploy_secretsmanager_csi") == "True"):
             # For more information see https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_csi_driver.html
 
@@ -1450,6 +1458,57 @@ class EKSClusterStack(core.Stack):
                     str(loop_iteration)
                 manifest = eks_cluster.add_manifest(manifest_id, value)
                 manifest.node.add_dependency(secrets_csi_sa)
+
+        # Kubernetes External Secrets
+        if (self.node.try_get_context("deploy_external_secrets") == "True"):
+            # For more information see https://github.com/external-secrets/kubernetes-external-secrets
+            # Deploy the External Secrets Controller
+            # Create the Service Account
+            externalsecrets_service_account = eks_cluster.add_service_account(
+                "kubernetes-external-secrets",
+                name="kubernetes-external-secrets",
+                namespace="kube-system"
+            )
+
+            # Define the policy in JSON
+            externalsecrets_policy_statement_json_1 = {
+                "Effect": "Allow",
+                "Action": [
+                    "secretsmanager:GetResourcePolicy",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:ListSecretVersionIds"
+                ],
+                "Resource": [
+                    "*"
+                ]
+            }
+
+            # Add the policies to the service account
+            externalsecrets_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(externalsecrets_policy_statement_json_1))
+
+            # Deploy the Helm Chart
+            external_secrets_chart = eks_cluster.add_helm_chart(
+                "external-secrets",
+                chart="kubernetes-external-secrets",
+                version="8.3.0",
+                repository="https://external-secrets.github.io/kubernetes-external-secrets/",
+                namespace="kube-system",
+                release="external-secrets",
+                values={
+                    "env": {
+                        "AWS_REGION": self.region
+                    },
+                    "serviceAccount": {
+                        "name": "kubernetes-external-secrets",
+                        "create": False
+                    },
+                    "securityContext": {
+                        "fsGroup": 65534
+                    }
+                }
+            )
 
 
 app = core.App()

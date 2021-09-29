@@ -46,6 +46,7 @@ This Quick Start is a reference architecture and implementation of how you can u
     1. (Optional) The Calico Network Policy Provider (https://docs.aws.amazon.com/eks/latest/userguide/calico.html). This enforces any [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) that you specify.
         1. NOTE: Traffic flow to and from pods with associated security groups are not subjected to Calico network policy enforcement and are limited to Amazon EC2 security group enforcement only. Community effort is underway to remove this limitation. But, until then, you have to choose either Security Groups for Pods **OR** Calico/Network Policies. If enabling this then also disable Security Groups for Pods in `cdk.json`. 
     1. (Optional) An OPA Gatekeeper to enforce preventative security and operational policies (https://github.com/open-policy-agent/gatekeeper). A set of example policies is provided as well - see `gatekeeper-policies/README.md`
+    1. (Optional) The Kubernetes External Secrets Operator (https://github.com/external-secrets/kubernetes-external-secrets). This replicates sercrets from things like Parameter Store and Secrets Manager one-way into Kubernetes secrets.
 1. Autoscaling
     1. The cluster autoscaler (CA) (https://github.com/kubernetes/autoscaler). This will scale your EC2 instances to ensure you have enough capacity to launch all of your Pods as they are deployed/scaled.
     1. The metrics-server (required for the Horizontal Pod Autoscaler (HPA)) (https://github.com/kubernetes-sigs/metrics-server)
