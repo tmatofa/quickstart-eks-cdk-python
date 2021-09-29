@@ -1510,6 +1510,53 @@ class EKSClusterStack(core.Stack):
                 }
             )
 
+        # Kubecost
+        if (self.node.try_get_context("deploy_kubecost") == "True"):
+            # For more information see https://www.kubecost.com/install#show-instructions
+            # And https://github.com/kubecost/cost-analyzer-helm-chart/tree/master
+
+            # Deploy the Helm Chart
+            kubecost_chart = eks_cluster.add_helm_chart(
+                "kubecost",
+                chart="cost-analyzer",
+                version="1.87.0",
+                repository="https://kubecost.github.io/cost-analyzer/",
+                namespace="kube-system",
+                release="kubecost",
+                values={
+                    "kubecostToken": self.node.try_get_context("kubecost_token")
+                }
+            )
+
+            # Deploy an internal NLB
+            kubecostnlb_manifest = eks_cluster.add_manifest("KubecostNLB", {
+                "kind": "Service",
+                "apiVersion": "v1",
+                "metadata": {
+                    "name": "kubecost-nlb",
+                    "namespace": "kube-system",
+                    "annotations": {
+                        "service.beta.kubernetes.io/aws-load-balancer-type": "nlb-ip",
+                        "service.beta.kubernetes.io/aws-load-balancer-internal": "true"
+                    }
+                },
+                "spec": {
+                    "ports": [
+                        {
+                            "name": "service",
+                            "protocol": "TCP",
+                            "port": 80,
+                            "targetPort": 9090
+                        }
+                    ],
+                    "selector": {
+                        "app.kubernetes.io/name": "cost-analyzer"
+                    },
+                    "type": "LoadBalancer"
+                }
+            })
+            kubecostnlb_manifest.node.add_dependency(kubecost_chart)
+
 
 app = core.App()
 if app.node.try_get_context("account").strip() != "":

@@ -51,6 +51,9 @@ This Quick Start is a reference architecture and implementation of how you can u
     1. The cluster autoscaler (CA) (https://github.com/kubernetes/autoscaler). This will scale your EC2 instances to ensure you have enough capacity to launch all of your Pods as they are deployed/scaled.
     1. The metrics-server (required for the Horizontal Pod Autoscaler (HPA)) (https://github.com/kubernetes-sigs/metrics-server)
 1. The AWS Systems Manager (SSM) agent. This allows for various management activities (e.g. Inventory, Patching, Session Manager, etc.) of your Instances/Nodes by AWS Systems Manager.
+1. (Optional) Kubecost - Kubecost provides real-time cost visibility and insights for teams using Kubernetes, helping you continuously reduce your cloud costs. In addition to providing a SaaS-based offering, Kubecost has opensourced the core of their offering such that you can run it yourself. We describe this in this blog post - https://aws.amazon.com/blogs/containers/how-to-track-costs-in-multi-tenant-amazon-eks-clusters-using-kubecost/.
+    1. Note that you need to go to https://www.kubecost.com/install#show-instructions and get your kubecostToken for free by registering your email address. You need to specify this in cdk.json when you enable the add-on.
+    1. Note that this provisions a Kubecost that does not have a login/password configured. It is secured instead by network access controlled by it being in a private subnet and its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment you might want to wrap it behind an authenticated proxy or otherwise secure access to it in a production deployment - or consider using the Kubecost managed SaaS product.
 
 The items listed as (Optional) above are not enabled by default - but all of the add-ons are really optional and you control whether you'll get them with a parameter for each in  `cluster-bootstrap/cdk.json` that you flip to True/False.
 
@@ -212,6 +215,14 @@ There are some default dashboards that ship with this which you can see by going
     - Similar to the Pod view but instead focuses on Deployment, StatefulSet and DaemonSet views
 
 Within all of these dashboards you can click on names as links and it'll drill down to show you details relevant to that item.
+
+## (Optional) How to access Kubecost should you choose to deploy it
+
+We have deployed an in-VPC private Network Load Balancer (NLB) to access your Kubecost service. There is no login or password - access is controlled from a network perspective.
+
+To access this enter the following command `get service kubecost-nlb --namespace=kube-system` to find the address of this under EXTERNAL-IP. Alternatively, you can find the Kubecost NLB in the AWS EC2 console and get its address from there.
+
+You'll need to have network connectivity via something like the Client VPN, Site-to-Site VPN or DirectConnect to be able to reach it.
 
 ## Deploy some sample/demo apps to explore our new Kubernetes environment and its features
 
