@@ -663,7 +663,7 @@ class EKSClusterStack(core.Stack):
                     "node": {
                         "serviceAccount": {
                             "create": False,
-                            "name": "awsefscsidriver"
+                            "name": "awsebscsidriver"
                         }
                     }
                 }
