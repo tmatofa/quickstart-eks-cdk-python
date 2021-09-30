@@ -3,7 +3,7 @@ Purpose
 
 Example of how to provision an EKS cluster, create the IAM Roles for Service Accounts (IRSA) mappings,
 and then deploy various common cluster add-ons (AWS LB Controller, ExternalDNS, EBS/EFS CSI Drivers,
-Cluster Autoscaler, AWS OpenSearch, Prometheus & Grafana, Calico NetworkPolicy enforcement, 
+Cluster Autoscaler, AWS OpenSearch, Prometheus & Grafana, Calico NetworkPolicy enforcement,
 OPA Gatekeeper w/example policies, etc.)
 
 NOTE: This pulls many parameters/options for what you'd like from the cdk.json context section.
@@ -24,6 +24,7 @@ import yaml
 
 # Import the custom resource to switch on control plane logging from ekslogs_custom_resource.py
 from ekslogs_custom_resource import EKSLogsObjectResource
+from amp_custom_resource import AMPCustomResource
 
 
 class EKSClusterStack(core.Stack):
@@ -921,96 +922,6 @@ class EKSClusterStack(core.Stack):
 
             )
 
-        # Self-Managed Prometheus and Grafana from the community Prometheus Stack
-        if (self.node.try_get_context("deploy_kube_prometheus_stack") == "True"):
-            # TODO Replace this with the new AWS Managed Prometheus and Grafana when it is Generally Available (GA)
-            # For more information see https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
-            prometheus_chart = eks_cluster.add_helm_chart(
-                "metrics",
-                chart="kube-prometheus-stack",
-                version="18.0.12",
-                release="prometheus",
-                repository="https://prometheus-community.github.io/helm-charts",
-                namespace="kube-system",
-                values={
-                    "prometheus": {
-                        "prometheusSpec": {
-                            "retention": self.node.try_get_context("prometheus_stack_prometheus_retention"),
-                            "storageSpec": {
-                                "volumeClaimTemplate": {
-                                    "spec": {
-                                        "accessModes": [
-                                            "ReadWriteOnce"
-                                        ],
-                                        "resources": {
-                                            "requests": {
-                                                "storage": self.node.try_get_context("prometheus_stack_prometheus_disk_size")
-                                            }
-                                        },
-                                        "storageClassName": "gp2"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "alertmanager": {
-                        "alertmanagerSpec": {
-                            "storage": {
-                                "volumeClaimTemplate": {
-                                    "spec": {
-                                        "accessModes": [
-                                            "ReadWriteOnce"
-                                        ],
-                                        "resources": {
-                                            "requests": {
-                                                "storage": self.node.try_get_context("prometheus_stack_alertmanager_disk_size")
-                                            }
-                                        },
-                                        "storageClassName": "gp2"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "grafana": {
-                        "persistence": {
-                            "enabled": "true",
-                            "storageClassName": "gp2",
-                            "size": self.node.try_get_context("prometheus_stack_grafana_disk_size")
-                        }
-                    }
-                }
-            )
-
-            # Deploy an internal NLB to Grafana
-            grafananlb_manifest = eks_cluster.add_manifest("GrafanaNLB", {
-                "kind": "Service",
-                "apiVersion": "v1",
-                "metadata": {
-                    "name": "grafana-nlb",
-                    "namespace": "kube-system",
-                    "annotations": {
-                        "service.beta.kubernetes.io/aws-load-balancer-type": "nlb-ip",
-                        "service.beta.kubernetes.io/aws-load-balancer-internal": "true"
-                    }
-                },
-                "spec": {
-                    "ports": [
-                        {
-                            "name": "service",
-                            "protocol": "TCP",
-                            "port": 80,
-                            "targetPort": 3000
-                        }
-                    ],
-                    "selector": {
-                        "app.kubernetes.io/name": "grafana"
-                    },
-                    "type": "LoadBalancer"
-                }
-            })
-            grafananlb_manifest.node.add_dependency(prometheus_chart)
-
         # Metrics Server (required for the Horizontal Pod Autoscaler (HPA))
         if (self.node.try_get_context("deploy_metrics_server") == "True"):
             # For more info see https://github.com/bitnami/charts/tree/master/bitnami/metrics-server
@@ -1515,6 +1426,25 @@ class EKSClusterStack(core.Stack):
             # For more information see https://www.kubecost.com/install#show-instructions
             # And https://github.com/kubecost/cost-analyzer-helm-chart/tree/master
 
+            # If we're deploying Prometheus then we don't need the node exporter
+            if (self.node.try_get_context("deploy_amp") == "True"):
+                kubecost_values = {
+                    "kubecostToken": self.node.try_get_context("kubecost_token"),
+                    "prometheus": {
+                        "nodeExporter": {
+                            "enabled": False
+                        },
+                        "serviceAccounts": {
+                            "nodeExporter": {
+                                "create": False
+                            }
+                        }
+                    }
+                }
+            else:
+                kubecost_values = {
+                    "kubecostToken": self.node.try_get_context("kubecost_token")}
+
             # Deploy the Helm Chart
             kubecost_chart = eks_cluster.add_helm_chart(
                 "kubecost",
@@ -1523,9 +1453,7 @@ class EKSClusterStack(core.Stack):
                 repository="https://kubecost.github.io/cost-analyzer/",
                 namespace="kube-system",
                 release="kubecost",
-                values={
-                    "kubecostToken": self.node.try_get_context("kubecost_token")
-                }
+                values=kubecost_values
             )
 
             # Deploy an internal NLB
@@ -1556,6 +1484,155 @@ class EKSClusterStack(core.Stack):
                 }
             })
             kubecostnlb_manifest.node.add_dependency(kubecost_chart)
+
+        # Amazon Managed Prometheus (AMP)
+        if (self.node.try_get_context("deploy_amp") == "True"):
+            # For more information see https://aws.amazon.com/blogs/mt/getting-started-amazon-managed-service-for-prometheus/
+
+            # Use our AMPCustomResource to provision/deprovision the AMP
+            # TODO remove this and use the proper CDK construct when it becomes available
+            amp_workspace_id = AMPCustomResource(
+                self, "AMPCustomResource").workspace_id
+            # Output the AMP Workspace ID and Export it
+            core.CfnOutput(
+                self, "AMPWorkspaceID",
+                value=amp_workspace_id,
+                description="The ID of the AMP Workspace",
+                export_name="AMPWorkspaceID"
+            )
+
+            # Create IRSA mapping
+            amp_sa = eks_cluster.add_service_account(
+                "amp-sa",
+                name="amp-iamproxy-service-account",
+                namespace="kube-system"
+            )
+
+            # Associate the IAM Policy
+            amp_policy_statement_json_1 = {
+                "Effect": "Allow",
+                "Action": [
+                    "aps:RemoteWrite",
+                    "aps:QueryMetrics",
+                    "aps:GetSeries",
+                    "aps:GetLabels",
+                    "aps:GetMetricMetadata"
+                ],
+                "Resource": ["*"]
+            }
+            amp_sa.add_to_policy(iam.PolicyStatement.from_json(
+                amp_policy_statement_json_1))
+
+            # Install Prometheus with a low 1 hour local retention to ship the metrics to the AMP
+            # For more information see https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus
+            amp_prometheus_chart = eks_cluster.add_helm_chart(
+                "prometeus-chart",
+                chart="prometheus",
+                version="14.8.0",
+                release="prometheus-for-amp",
+                repository="https://prometheus-community.github.io/helm-charts",
+                namespace="kube-system",
+                values={
+                    "serviceAccounts": {
+                        "server": {
+                            "annotations": {
+                                "eks.amazonaws.com/role-arn": amp_sa.role.role_arn,
+                            },
+                            "name": "amp-iamproxy-service-account",
+                            "create": False
+                        },
+                        "alertmanager": {
+                            "create": False
+                        },
+                        "pushgateway": {
+                            "create": False
+                        }
+                    },
+                    "server": {
+                        "remoteWrite": [{
+                            "queue_config": {
+                                "max_samples_per_send": 1000,
+                                "max_shards": 200,
+                                "capacity": 2500
+                            },
+                            "url": "https://aps-workspaces."+self.region+".amazonaws.com/workspaces/"+amp_workspace_id+"/api/v1/remote_write",
+                            "sigv4": {
+                                "region": self.region
+                            }
+                        }],
+                        "statefulSet": {
+                            "enabled": True
+                        },
+                        "retention": "1h"
+                    },
+                    "alertmanger": {
+                        "enabled": False
+                    },
+                    "pushgateway": {
+                        "enabled": False
+                    }
+                }
+            )
+            amp_prometheus_chart.node.add_dependency(amp_sa)
+
+        # Self-Managed Grafana for AMP
+        if (self.node.try_get_context("deploy_grafana_for_amp") == "True"):
+            # Install a self-managed Grafana to visualise the AMP metrics
+            # NOTE You likely want to use the AWS Managed Grafana (AMG) in production
+            # We are using this as AMG requires SSO/SAML and is harder to include in the template
+            # For more information see https://github.com/grafana/helm-charts/tree/main/charts/grafana
+            amp_grafana_chart = eks_cluster.add_helm_chart(
+                "amp-grafana-chart",
+                chart="grafana",
+                version="6.16.0",
+                release="grafana-for-amp",
+                repository="https://grafana.github.io/helm-charts",
+                namespace="kube-system",
+                values={
+                    "serviceAccount": {
+                        "name": "amp-iamproxy-service-account",
+                        "annotations": {
+                            "eks.amazonaws.com/role-arn": amp_sa.role.role_arn
+                        },
+                        "create": False
+                    },
+                    "grafana.ini": {
+                        "auth": {
+                            "sigv4_auth_enabled": True
+                        }
+                    }
+                }
+            )
+            amp_grafana_chart.node.add_dependency(amp_prometheus_chart)
+
+            # Deploy an internal NLB to Grafana
+            amp_grafananlb_manifest = eks_cluster.add_manifest("AMPGrafanaNLB", {
+                "kind": "Service",
+                "apiVersion": "v1",
+                "metadata": {
+                    "name": "amp-grafana-nlb",
+                    "namespace": "kube-system",
+                    "annotations": {
+                        "service.beta.kubernetes.io/aws-load-balancer-type": "nlb-ip",
+                        "service.beta.kubernetes.io/aws-load-balancer-internal": "true"
+                    }
+                },
+                "spec": {
+                    "ports": [
+                        {
+                            "name": "service",
+                            "protocol": "TCP",
+                            "port": 80,
+                            "targetPort": 3000
+                        }
+                    ],
+                    "selector": {
+                        "app.kubernetes.io/name": "grafana"
+                    },
+                    "type": "LoadBalancer"
+                }
+            })
+            amp_grafananlb_manifest.node.add_dependency(amp_grafana_chart)
 
 
 app = core.App()

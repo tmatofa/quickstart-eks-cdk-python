@@ -28,15 +28,17 @@ This Quick Start is a reference architecture and implementation of how you can u
 1. External DNS (https://github.com/kubernetes-sigs/external-dns) to allow you to automatically create/update Route53 entries to point your 'real' names at your Ingresses and Services.
 1. Observability
     1. CloudWatch Container Insights - Metrics
+    1. (Optional) AWS Managed Prometheus and self-managed Grafana
+        1. We create a new AMP Workspace
+        1. We install a local prometheus with a low local retention of 1 hour to collect and ship the cluster's meterics to that AMP Workspace
+        1. We install a self-managed Grafana on the cluster to visualise the metrics in AMP. 
+            1. This is because the AWS Managaed Grafana (AMG) is more difficult to automate provisioning of in a template like this given it requires federation to an external identitiy provider or AWS SSO etc. In production you likely do want to use AMG instead - which is why we make this self-managed a seperate option to the AMG.
     1. CloudWatch Container Insights - Logs
     1. (Optional) AWS managed OpenSearch (successor to Elasticsearch) and OpenSearch Dashboards (successor to Kibana) - Logs 
         1. If you flip `deploy_managed_opensearch` to True this creates a new managed Amazon OpenSearch Domain behind a private VPC endpoint as well as a fluent-bit DaemonSet to ship all your container logs there - including enriching them with the Kubernetes metadata using the kubernetes fluent-bit filter.
         1. Note that this provisions a single node 10GB managed OpenSearch Domain suitable for a proof of concept. To use this in production you'll likely need to edit the `es_capacity` section of `cluster-bootstrap/cdk.json` to scale this out from a capacity and availability perspective. For more information see https://docs.aws.amazon.com/opensearch-service/latest/developerguide/sizing-domains.html.
         1. Note that this provisions an OpenSearch and OpenSearch Dashboards that does not have a login/password configured. It is secured instead by network access controlled by it being in a private subnet and its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment, for production use you'd want to consider implementing Cognito to control user access to OpenSearch Dashboards - https://docs.aws.amazon.com/opensearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam.
-    1. (Optional) (Temporarily until the AWS Managed Prometheus/Grafana are available) a self-managed Prometheus and Grafana - Metrics
-        1. If you flip `deploy_kube_prometheus_operator` to True this will deploy the kube-prometheus Operator (https://github.com/prometheus-operator/kube-prometheus) which deploys you a Prometheus on your cluster that will collect all your cluster metrics as well as a Grafana to visualize them.
-        1. You can adjust the disk size of these in `cluster-bootstrap/cdk.json` with `prometheus_disk_size`, `alertmanager_disk_size` and `grafana_disk_size`. 
-        1. AMP and AMG are not yet available in all regions nor are they supported by CloudFormation and the CDK yet - once they are we'll add that to this Quick Start and deprecate this limited self-managed option in lieu of that.
+
 1. CSI Drivers
     1. The AWS EBS CSI Driver (https://github.com/kubernetes-sigs/aws-ebs-csi-driver). Note that new development on EBS functionality has moved out of the Kubernetes mainline to this externalized CSI driver.
     1. The AWS EFS CSI Driver (https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html). Note that new development on EFS functionality has moved out of the Kubernetes mainline to this externalized CSI driver.
@@ -197,24 +199,34 @@ You should see all of your logs.
 
 TODO: Document how to do a few basic things here re: searching, filtering and visualising your logs
 
-## (Optional) How to access Prometheus and Grafana if you choose to deploy them
+## (Optional) How to access Prometheus (AMP) via Grafana if you choose to deploy them
 
 We have deployed an in-VPC private Network Load Balancer (NLB) to access your Grafana service to visualize the metrics from the Prometheus we've deployed onto the cluster.
 
-To access this enter the following command `get service grafana-nlb --namespace=kube-system` to find the address of this under EXTERNAL-IP. Alternatively, you can find the Grafana NLB in the AWS EC2 console and get its address from there.
+To access this enter the following command `kubectl get service amp-grafana-nlb --namespace=kube-system` to find the address of this under EXTERNAL-IP. Alternatively, you can find the Grafana NLB in the AWS EC2 console and get its address from there.
 
-Once you go to that page the default login/password is admin/prom-operator.
+The default username is `admin` and you get the initial password by running `kubectl get secrets grafana-for-amp -n kube-system -o jsonpath='{.data.admin-password}'|base64 --decode`. You can change this password as well as create/managed additional users once you are signed in.
 
-There are some default dashboards that ship with this which you can see by going to Home on top. This will take you to a list view of the available dashboards. Some good ones to check out include:
+Then you need to add the AMP as a datasource:
+1. Hover over the gear on the left and choose `Data sources`
+1. Click the `Add data source` button
+1. Choose Prometheus
+1. In another tab go to the AWS Console for the Amazon Prometheus Service. Click the workspace ID and then copy and paste the `Endpoint - query URL` link - excluding the /api/v1/query off the end
+1. Paste that in the URL
+1. Enable SigV4 auth
+1. Under default region choose the region you are using
+1. Click Save and Test
 
-- Kubernetes / Compute Resources / Cluster
-    - This gives you a whole cluster view
-- Kubernetes / Compute Resources / Namespace (Pods)
-    - There is a namespace dropdown at the top and it'll show you the graphs including the consumption in that namespace broken down by Pod
-- Kubernetes / Compute Resources / Namespace (Workloads)
-    - Similar to the Pod view but instead focuses on Deployment, StatefulSet and DaemonSet views
+Then you need to import some dashboards. You can import these from the Grafana website (https://grafana.com/grafana/dashboards?collector=nodeExporter&dataSource=prometheus&direction=desc&orderBy=downloads&search=kubernetes) by listing the URL or number there when importing them.
 
-Within all of these dashboards you can click on names as links and it'll drill down to show you details relevant to that item.
+To import Dashboards:
+1. Hover over the four square icon on the left and choose `Manage`
+1. Click the `Import` button
+
+A few good ones to get you started are:
+- Cluster Monitoring for Kubernetes - https://grafana.com/grafana/dashboards/10000
+- Pod Stats and Info - https://grafana.com/grafana/dashboards/10518
+- Kubernetes Metrics (Deployments vs StatefulSets vs DaemonSets) - https://grafana.com/grafana/dashboards/14204
 
 ## (Optional) How to access Kubecost should you choose to deploy it
 

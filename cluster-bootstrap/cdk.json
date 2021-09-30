@@ -29,11 +29,6 @@
       "opensearch_master_nodes": 0,
       "opensearch_master_node_instance_type": "r6g.large.search",
       "opensearch_ebs_volume_size": 10,
-      "deploy_kube_prometheus_stack": "False",
-      "prometheus_stack_prometheus_disk_size": "8Gi",
-      "prometheus_stack_alertmanager_disk_size": "2Gi",
-      "prometheus_stack_grafana_disk_size": "10Gi",
-      "prometheus_stack_prometheus_retention": "7d",
       "deploy_metrics_server": "True",
       "deploy_calico_np": "False",
       "deploy_ssm_agent": "True",
@@ -51,6 +46,8 @@
       "deploy_secretsmanager_csi": "False",
       "deploy_external_secrets": "False",
       "deploy_kubecost": "False",
-      "kubecost_token": "aGVsbUBrdWJlY29zdC5jb20=xm343yadf98"
+      "kubecost_token": "aGVsbUBrdWJlY29zdC5jb20=xm343yadf98",
+      "deploy_amp": "False",
+      "deploy_grafana_for_amp": "False"
     }
   }
