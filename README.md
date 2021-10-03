@@ -30,9 +30,9 @@ This Quick Start is a reference architecture and implementation of how you can u
     1. CloudWatch Container Insights - Metrics
     1. (Optional) AWS Managed Prometheus and self-managed Grafana
         1. We create a new AMP Workspace
-        1. We install a local prometheus with a low local retention of 1 hour to collect and ship the cluster's meterics to that AMP Workspace
-        1. We install a self-managed Grafana on the cluster to visualise the metrics in AMP. 
-            1. This is because the AWS Managaed Grafana (AMG) is more difficult to automate provisioning of in a template like this given it requires federation to an external identitiy provider or AWS SSO etc. In production you likely do want to use AMG instead - which is why we make this self-managed a seperate option to the AMG.
+        1. We install a local prometheus with a low local retention of 1 hour to collect and ship the cluster's metrics to that AMP Workspace
+        1. We install a self-managed Grafana on the cluster to visualize the metrics in AMP. 
+            1. This is because the AWS Managed Grafana (AMG) is more difficult to automate provisioning of in a template like this given it requires federation to an external identity provider or AWS SSO etc. In production you likely do want to use AMG instead - which is why we make this self-managed a separate option to the AMG.
     1. CloudWatch Container Insights - Logs
     1. (Optional) AWS managed OpenSearch (successor to Elasticsearch) and OpenSearch Dashboards (successor to Kibana) - Logs 
         1. If you flip `deploy_managed_opensearch` to True this creates a new managed Amazon OpenSearch Domain behind a private VPC endpoint as well as a fluent-bit DaemonSet to ship all your container logs there - including enriching them with the Kubernetes metadata using the kubernetes fluent-bit filter.
@@ -48,7 +48,7 @@ This Quick Start is a reference architecture and implementation of how you can u
     1. (Optional) The Calico Network Policy Provider (https://docs.aws.amazon.com/eks/latest/userguide/calico.html). This enforces any [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) that you specify.
         1. NOTE: Traffic flow to and from pods with associated security groups are not subjected to Calico network policy enforcement and are limited to Amazon EC2 security group enforcement only. Community effort is underway to remove this limitation. But, until then, you have to choose either Security Groups for Pods **OR** Calico/Network Policies. If enabling this then also disable Security Groups for Pods in `cdk.json`. 
     1. (Optional) An OPA Gatekeeper to enforce preventative security and operational policies (https://github.com/open-policy-agent/gatekeeper). A set of example policies is provided as well - see `gatekeeper-policies/README.md`
-    1. (Optional) The Kubernetes External Secrets Operator (https://github.com/external-secrets/kubernetes-external-secrets). This replicates sercrets from things like Parameter Store and Secrets Manager one-way into Kubernetes secrets.
+    1. (Optional) The Kubernetes External Secrets Operator (https://github.com/external-secrets/kubernetes-external-secrets). This replicates secrets from things like Parameter Store and Secrets Manager one-way into Kubernetes secrets.
 1. Autoscaling
     1. The cluster autoscaler (CA) (https://github.com/kubernetes/autoscaler). This will scale your EC2 instances to ensure you have enough capacity to launch all of your Pods as they are deployed/scaled.
     1. The metrics-server (required for the Horizontal Pod Autoscaler (HPA)) (https://github.com/kubernetes-sigs/metrics-server)
@@ -65,7 +65,7 @@ The Cloud Development Kit (CDK) is a tool where you can write infrastructure-as-
 
 When you develop and deploy infrastructure with the CDK you don't edit the intermediate CloudFormation but, instead, let CDK regenerate it in response to changes in the upstream CDK code.
 
-What makes CDK uniquely good when it comes to our EKS Quickstart is:
+What makes CDK uniquely good when it comes to our EKS Quick Start is:
 
 * It handles the IAM Roles for Service Accounts (IRSA) rather elegantly and creates the IAM Roles and Policies, creates the Kubernetes service accounts, and then maps them to each other.
 * It has implemented custom CloudFormation resources with Lambda invoking kubectl and helm to deploy manifests and charts as part of the cluster provisioning.
@@ -74,7 +74,7 @@ What makes CDK uniquely good when it comes to our EKS Quickstart is:
 ## Getting started
 
 You can either deploy this from your machine or leverage CodeBuild. The advantage of using CodeBuild is it also sets up a 'GitOps' approach where when you merge changes to
-the cluster-bootstrap folder it'll (re)run `cdk deploy` for you. This means that to update the cluster you just change this file and merge. 
+the cluster-bootstrap folder it'll (re)run `npx cdk deploy` for you. This means that to update the cluster you just change this file and merge. 
 
 ###  Deploy from CodeBuild
 To use the CodeBuild CloudFormation Template:
@@ -86,7 +86,7 @@ To use the CodeBuild CloudFormation Template:
 1. Go to the CodeBuild console, click on the Build project that starts with `EKSCodeBuild`, and then click the Start build button.
 1. (Optional) You can click the Tail logs button to follow along with the build process
 
-**_NOTE:_** This also enables a GitOps pattern where changes to the cluster-bootstrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `cdk deploy` via web hook.
+**_NOTE:_** This also enables a GitOps pattern where changes to the cluster-bootstrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `npx cdk deploy` via web hook.
 
 ### Deploy from your laptop
 
@@ -108,14 +108,14 @@ Run `sudo ./ubuntu-prereqs.sh`
 1. Make sure that you have your AWS CLI configured with administrative access to the AWS account in question (e.g. an `aws s3 ls` works)
     1. This can be via setting your access key and secret in your .aws folder via `aws configure` or in your environment variables by copy and pasting from AWS SSO etc.
 1. Run `cd quickstart-eks-cdk-python/cluster-bootstrap`
-2. Run `sudo npm install --upgrade -g aws-cdk` to ensure your CDK is up to date
-3. Run `pip3 install --upgrade -r requirements.txt` to install the required Python bits of the CDK
+2. Run `npm install` to install the exact version of the CDK this has been tested with (locally in the node_modules folder)
+3. Run `pip3 install --user --upgrade -r requirements.txt` to install the required Python bits of the CDK (locked to the same exact CDK version)
 4. Run `export CDK_DEPLOY_REGION=ap-southeast-2` replacing ap-southeast-2 with your region of choice
 5. Run `export CDK_DEPLOY_ACCOUNT=123456789123` replacing 123456789123 with your AWS account number
 6. (Optional) If you want to make an existing IAM User or Role the cluster admin rather than creating a new one then edit `cluster-bootstrap/cdk.json` and comment out the current cluster_admin_role and uncomment the one beneath it and fill in the ARN of the User/Role you'd like there.
 7. (Only required the first time you use the CDK in this account) Run `cdk bootstrap` to create the S3 bucket where it puts the CDK puts its artifacts
 8. (Only required the first time OpenSearch in VPC mode is used in this account) Run `aws iam create-service-linked-role --aws-service-name es.amazonaws.com`
-9. Run `cdk deploy --require-approval never`
+9. Run `npx cdk deploy --require-approval never`
 
 ### (Optional) Deploy Open Policy Agent (OPA) Gatekeeper and the policies via Flux v2
 
@@ -131,11 +131,11 @@ In order to deploy Gatekeeper and the example policies:
 1. Run `kubectl apply -f gatekeeper/gatekeeper-sync.yaml` to install the Gatekeeper Helm Chart w/Flux (as well as enable future GitOps if the main branch of the repo is updated)
 1. Run `flux get all` to see the progress of getting and installing the Gatekeeper Helm Chart
 1. Run `flux create source git gatekeeper --url=https://github.com/aws-quickstart/quickstart-eks-cdk-python --branch=main` to add this repo to Flux as a source
-    1. Alternatively, and perhaps advisably, specify the URL of your git repo you've forked/cloned the projet to instead - as it will trigger GitOps actios going forward when this changes!
+    1. Alternatively, and perhaps advisably, specify the URL of your git repo you've forked/cloned the project to instead - as it will trigger GitOps actions going forward when this changes!
 1. Run `kubectl apply -f gatekeeper/policies/policies-sync.yaml` to install the policies with Flux (as well as enable future GitOps if the main branch of the repo is updated)
 1. Run `flux get all` to see all of the Flux items and their reconciliation statuses
 
-If you want to change any of the Gatekeeper Constraints or ConstraitTemplates you just change the YAML and then push/merge it to the repo and branch you indicated above and Flux will them deploy those changes to your cluster via GitOps.
+If you want to change any of the Gatekeeper Constraints or ConstraintTemplates you just change the YAML and then push/merge it to the repo and branch you indicated above and Flux will them deploy those changes to your cluster via GitOps.
 
 ## Deploy and set up a Bastion based on an EC2 instance accessed securely via Systems Manager's Session Manager
 
@@ -197,7 +197,7 @@ For production use, though, you'd likely want to consider implementing Cognito t
 
 You should see all of your logs.
 
-TODO: Document how to do a few basic things here re: searching, filtering and visualising your logs
+TODO: Document how to do a few basic things here re: searching, filtering and visualizing your logs
 
 ## (Optional) How to access Prometheus (AMP) via Grafana if you choose to deploy them
 
@@ -242,11 +242,11 @@ Various demo application are in the demo-apps folder showing how to use the vari
 
 ## Upgrading your cluster
 
-Since we are explicit both with the EKS Control Plane version as well as the Managed Node Group AMI version upgrading these is simply incrementing these versions, saving `cluster-bootstrap/cdk.json` and then running a `cdk deploy`.
+Since we are explicit both with the EKS Control Plane version as well as the Managed Node Group AMI version upgrading these is simply incrementing these versions, saving `cluster-bootstrap/cdk.json` and then running a `npx cdk deploy`.
 
 As per the [EKS Upgrade Instructions](https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html) you start by upgrading the control plane, then any required add-on versions and then the worker nodes.
 
-Upgrade the control plane by changing `eks_version` in  `cluster-bootstrap/cdk.json`. You can see what to put there by looking at the [CDK documentation for KubernetesVersion](https://docs.aws.amazon.com/cdk/api/latest/python/aws_cdk.aws_eks/KubernetesVersion.html). Then run `cdk deploy` - or let the CodeBuild GitOps provided in `cluster-codebuild` do it for you.
+Upgrade the control plane by changing `eks_version` in  `cluster-bootstrap/cdk.json`. You can see what to put there by looking at the [CDK documentation for KubernetesVersion](https://docs.aws.amazon.com/cdk/api/latest/python/aws_cdk.aws_eks/KubernetesVersion.html). Then run `npx cdk deploy` - or let the CodeBuild GitOps provided in `cluster-codebuild` do it for you.
 
 Upgrade the worker nodes by updating `eks_node_ami_version` in  `cluster-bootstrap/cdk.json` with the new version. You find the version to type there in the [EKS Documentation](https://docs.aws.amazon.com/eks/latest/userguide/eks-linux-ami-versions.html) as shown here:
 ![](eks_ami_version.PNG)
@@ -255,6 +255,6 @@ Upgrade the worker nodes by updating `eks_node_ami_version` in  `cluster-bootstr
 
 Each of our add-ons are deployed via Helm Charts and are explicit about the chart version being deployed. In the comment above each chart version we link to the GitHub repo for that chart where you can see what the current chart version is and can see what changes may have been rolled in since the one cited in the template.
 
-To upgrade the chart version update the chart version to the upstream version you see there, save it and then do a `cdk deploy`.
+To upgrade the chart version update the chart version to the upstream version you see there, save it and then do a `npx cdk deploy`.
 
 **NOTE:** While we were thinking about parameterizing the chart versions within `cluster-bootstrap/cdk.json`, it is possible as the Chart versions change that the values you have to specify might also change. As such, we have not done so as a reminder that this change might require a bit of research and testing rather than just popping a new version number parameter in and expecting it'll work.

@@ -7,8 +7,6 @@ brew install python
 brew install nodejs
 # Install kubectl
 brew install kubectl
-# Install the CDK
-npm install -g aws-cdk
 # Install fluxctl
 brew install fluxctl
 # Install Helm

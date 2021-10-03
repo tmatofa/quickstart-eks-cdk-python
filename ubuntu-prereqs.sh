@@ -22,9 +22,6 @@ echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https:/
 apt-get update
 apt-get install -y kubectl
 
-# Install the CDK
-npm install -g aws-cdk
-
 # Install the fluxctl
 cd /tmp
 wget -O fluxctl https://github.com/fluxcd/flux/releases/download/1.21.2/fluxctl_linux_amd64
