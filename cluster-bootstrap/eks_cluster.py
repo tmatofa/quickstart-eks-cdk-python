@@ -1253,6 +1253,10 @@ class EKSClusterStack(core.Stack):
                     restore_patch={},
                     patch_type=eks.PatchType.STRATEGIC
                 )
+                # We don't want to clean this up on Delete - it is a one-time patch to let the Helm Chart own the resources
+                patch_resource = patch.node.find_child("Resource")
+                patch_resource.apply_removal_policy(core.RemovalPolicy.RETAIN)
+                # Keep track of all the patches to set dependencies down below
                 patches.append(patch)
 
             # Create the Service Account
