@@ -1530,9 +1530,9 @@ class EKSClusterStack(core.Stack):
             # Install Prometheus with a low 1 hour local retention to ship the metrics to the AMP
             # For more information see https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus
             amp_prometheus_chart = eks_cluster.add_helm_chart(
-                "prometeus-chart",
+                "prometheus-chart",
                 chart="prometheus",
-                version="14.8.0",
+                version="14.9.2",
                 release="prometheus-for-amp",
                 repository="https://prometheus-community.github.io/helm-charts",
                 namespace="kube-system",
@@ -1588,7 +1588,7 @@ class EKSClusterStack(core.Stack):
             amp_grafana_chart = eks_cluster.add_helm_chart(
                 "amp-grafana-chart",
                 chart="grafana",
-                version="6.16.0",
+                version="6.16.14",
                 release="grafana-for-amp",
                 repository="https://grafana.github.io/helm-charts",
                 namespace="kube-system",
@@ -1604,39 +1604,59 @@ class EKSClusterStack(core.Stack):
                         "auth": {
                             "sigv4_auth_enabled": True
                         }
+                    },
+                    "service": {
+                        "type": "LoadBalancer",
+                        "annotations": {
+                            "service.beta.kubernetes.io/aws-load-balancer-type": "nlb-ip",
+                            "service.beta.kubernetes.io/aws-load-balancer-internal": "true"
+                        }
+                    },
+                    "persistence": {
+                        "enabled": True,
+                        "type": "statefulset",
+                        "storageClassName": "gp2"
+                    },
+                    "datasources": {
+                        "datasources.yaml": {
+                            "apiVersion": 1,
+                            "datasources": [{
+                                "name": "Prometheus",
+                                "type": "prometheus",
+                                "access": "proxy",
+                                "url": "https://aps-workspaces."+self.region+".amazonaws.com/workspaces/"+amp_workspace_id,
+                                "isDefault": True,
+                                "editable": True,
+                                "jsonData": {
+                                    "httpMethod": "POST",
+                                    "sigV4Auth": True,
+                                    "sigV4AuthType": "default",
+                                    "sigV4Region": self.region
+                                }
+                            }]
+                        }
+                    },
+                    "sidecar": {
+                        "dashboards": {
+                            "enabled": True,
+                            "label": "grafana_dashboard"
+                        }
                     }
                 }
             )
             amp_grafana_chart.node.add_dependency(amp_prometheus_chart)
 
-            # Deploy an internal NLB to Grafana
-            amp_grafananlb_manifest = eks_cluster.add_manifest("AMPGrafanaNLB", {
-                "kind": "Service",
-                "apiVersion": "v1",
-                "metadata": {
-                    "name": "amp-grafana-nlb",
-                    "namespace": "kube-system",
-                    "annotations": {
-                        "service.beta.kubernetes.io/aws-load-balancer-type": "nlb-ip",
-                        "service.beta.kubernetes.io/aws-load-balancer-internal": "true"
-                    }
-                },
-                "spec": {
-                    "ports": [
-                        {
-                            "name": "service",
-                            "protocol": "TCP",
-                            "port": 80,
-                            "targetPort": 3000
-                        }
-                    ],
-                    "selector": {
-                        "app.kubernetes.io/name": "grafana"
-                    },
-                    "type": "LoadBalancer"
-                }
-            })
-            amp_grafananlb_manifest.node.add_dependency(amp_grafana_chart)
+            # Dashboards for Grafana from the grafana-dashboards.yaml file
+            grafana_dashboards_yaml_file = open("grafana-dashboards.yaml", 'r')
+            grafana_dashboards_yaml = list(yaml.load_all(
+                grafana_dashboards_yaml_file, Loader=yaml.FullLoader))
+            grafana_dashboards_yaml_file.close()
+            for value in grafana_dashboards_yaml:
+                # print(value)
+                loop_iteration = loop_iteration + 1
+                manifest_id = "GrafanaDashboard" + str(loop_iteration)
+                grafana_dashboard_manifest = eks_cluster.add_manifest(
+                    manifest_id, value)
 
 
 app = core.App()

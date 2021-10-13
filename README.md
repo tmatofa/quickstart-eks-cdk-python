@@ -201,32 +201,18 @@ TODO: Document how to do a few basic things here re: searching, filtering and vi
 
 ## (Optional) How to access Prometheus (AMP) via Grafana if you choose to deploy them
 
-We have deployed an in-VPC private Network Load Balancer (NLB) to access your Grafana service to visualize the metrics from the Prometheus we've deployed onto the cluster.
+We have deployed an in-VPC private Network Load Balancer (NLB) (i.e. Not on the Internet) to access your Grafana service to visualize the metrics from the Prometheus we've deployed onto the cluster.
 
 To access this enter the following command `kubectl get service amp-grafana-nlb --namespace=kube-system` to find the address of this under EXTERNAL-IP. Alternatively, you can find the Grafana NLB in the AWS EC2 console and get its address from there.
 
 The default username is `admin` and you get the initial password by running `kubectl get secrets grafana-for-amp -n kube-system -o jsonpath='{.data.admin-password}'|base64 --decode`. You can change this password as well as create/managed additional users once you are signed in.
 
-Then you need to add the AMP as a datasource:
-1. Hover over the gear on the left and choose `Data sources`
-1. Click the `Add data source` button
-1. Choose Prometheus
-1. In another tab go to the AWS Console for the Amazon Prometheus Service. Click the workspace ID and then copy and paste the `Endpoint - query URL` link - excluding the /api/v1/query off the end
-1. Paste that in the URL
-1. Enable SigV4 auth
-1. Under default region choose the region you are using
-1. Click Save and Test
+We have set up AMP as a datasource and loaded a few sample dashboards for you to visualise the metrics on your EKS cluster:
+* `Cluster Monitoring for Kubernetes` to see cluster and node-level CPU, memory, network IO and free disk space
+* `Kubernetes Metrics - Deployments vs StatefulSets vs DaemonSets` to drill down on your workloads whether they be deployments, statefulsets or daemonsets
+* `Pod Stats & Info` to drill down on everything about a particular Pod
 
-Then you need to import some dashboards. You can import these from the Grafana website (https://grafana.com/grafana/dashboards?collector=nodeExporter&dataSource=prometheus&direction=desc&orderBy=downloads&search=kubernetes) by listing the URL or number there when importing them.
-
-To import Dashboards:
-1. Hover over the four square icon on the left and choose `Manage`
-1. Click the `Import` button
-
-A few good ones to get you started are:
-- Cluster Monitoring for Kubernetes - https://grafana.com/grafana/dashboards/10000
-- Pod Stats and Info - https://grafana.com/grafana/dashboards/10518
-- Kubernetes Metrics (Deployments vs StatefulSets vs DaemonSets) - https://grafana.com/grafana/dashboards/14204
+Click the word/link Home on the top of the Grafana page to see a list your Dashboards.
 
 ## (Optional) How to access Kubecost should you choose to deploy it
 
