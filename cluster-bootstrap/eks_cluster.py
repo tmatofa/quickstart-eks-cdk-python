@@ -895,7 +895,7 @@ class EKSClusterStack(core.Stack):
             fluentbit_chart = eks_cluster.add_helm_chart(
                 "fluentbit",
                 chart="fluent-bit",
-                version="0.16.6",
+                version="0.19.1",
                 release="fluent-bit",
                 repository="https://fluent.github.io/helm-charts",
                 namespace="kube-system",
