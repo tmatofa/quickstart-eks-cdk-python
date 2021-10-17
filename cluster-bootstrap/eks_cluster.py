@@ -2,9 +2,9 @@
 Purpose
 
 Example of how to provision an EKS cluster, create the IAM Roles for Service Accounts (IRSA) mappings,
-and then deploy various common cluster add-ons (AWS LB Controller, ExternalDNS, EBS/EFS CSI Drivers,
-Cluster Autoscaler, AWS OpenSearch, Prometheus & Grafana, Calico NetworkPolicy enforcement,
-OPA Gatekeeper w/example policies, etc.)
+and then deploy various common cluster add-ons (AWS Load Balancer Controller, ExternalDNS, EBS & EFS CSI Drivers,
+Cluster Autoscaler, AWS Managed OpenSearch and fluentbit, Metrics Server, Calico Network Policy provider, 
+CloudWatch Container Insights, Security Groups for Pods, Kubecost, AWS Managed Prometheus and Grafana, etc.)
 
 NOTE: This pulls many parameters/options for what you'd like from the cdk.json context section.
 Have a look there for many options you can change to customise this template for your environments/needs.
@@ -102,10 +102,19 @@ class EKSClusterStack(core.Stack):
             default_capacity=0
         )
 
+        # Create a Fargate Pod Execution Role to use with any Fargate Profiles
+        # We create this explicitly to allow for logging without fargate_only_cluster=True
+        fargate_pod_execution_role = iam.Role(
+            self, "FargatePodExecutionRole",
+            assumed_by=iam.ServicePrincipal("eks-fargate-pods.amazonaws.com"),
+            managed_policies=[iam.ManagedPolicy.from_aws_managed_policy_name(
+                "AmazonEKSFargatePodExecutionRolePolicy")]
+        )
+
         # Enable control plane logging (via ekslogs_custom_resource.py)
         # This requires a custom resource until that has CloudFormation Support
         # TODO: remove this when no longer required when CF support launches
-        EKSLogsObjectResource(
+        eks_logs_custom_resource = EKSLogsObjectResource(
             self, "EKSLogsObjectResource",
             eks_name=eks_cluster.cluster_name,
             eks_arn=eks_cluster.cluster_arn
@@ -141,28 +150,37 @@ class EKSClusterStack(core.Stack):
                 description="The EKS Cluster's kubectl SG ID",
                 export_name="EKSSGID"
             )
+            # Output the EKS Fargate Pod Execution Role (to use for logging to work)
+            core.CfnOutput(
+                self, "EKSFargatePodExecRoleArn",
+                value=fargate_pod_execution_role.role_arn,
+                description="The EKS Cluster's Fargate Pod Execution Role ARN",
+                export_name="EKSFargatePodExecRoleArn"
+            )
 
         # Add a Managed Node Group
-        # If we enabled spot then use that
-        if (self.node.try_get_context("eks_node_spot") == "True"):
-            node_capacity_type = eks.CapacityType.SPOT
-        # Otherwise give us OnDemand
-        else:
-            node_capacity_type = eks.CapacityType.ON_DEMAND
-        eks_node_group = eks_cluster.add_nodegroup_capacity(
-            "cluster-default-ng",
-            capacity_type=node_capacity_type,
-            desired_size=self.node.try_get_context("eks_node_quantity"),
-            max_size=self.node.try_get_context("eks_node_max_quantity"),
-            disk_size=self.node.try_get_context("eks_node_disk_size"),
-            # The default in CDK is to force upgrades through even if they violate - it is safer to not do that
-            force_update=False,
-            instance_types=[ec2.InstanceType(
-                self.node.try_get_context("eks_node_instance_type"))],
-            release_version=self.node.try_get_context("eks_node_ami_version")
-        )
-        eks_node_group.role.add_managed_policy(
-            iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
+        if (self.node.try_get_context("eks_deploy_managed_nodegroup") == "True"):
+            # If we enabled spot then use that
+            if (self.node.try_get_context("eks_node_spot") == "True"):
+                node_capacity_type = eks.CapacityType.SPOT
+            # Otherwise give us OnDemand
+            else:
+                node_capacity_type = eks.CapacityType.ON_DEMAND
+            eks_node_group = eks_cluster.add_nodegroup_capacity(
+                "cluster-default-ng",
+                capacity_type=node_capacity_type,
+                desired_size=self.node.try_get_context("eks_node_quantity"),
+                max_size=self.node.try_get_context("eks_node_max_quantity"),
+                disk_size=self.node.try_get_context("eks_node_disk_size"),
+                # The default in CDK is to force upgrades through even if they violate - it is safer to not do that
+                force_update=False,
+                instance_types=[ec2.InstanceType(
+                    self.node.try_get_context("eks_node_instance_type"))],
+                release_version=self.node.try_get_context(
+                    "eks_node_ami_version")
+            )
+            eks_node_group.role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"))
 
         # AWS Load Balancer Controller
         if (self.node.try_get_context("deploy_aws_lb_controller") == "True"):
@@ -479,7 +497,7 @@ class EKSClusterStack(core.Stack):
             externaldns_chart.node.add_dependency(externaldns_service_account)
 
         # AWS EBS CSI Driver
-        if (self.node.try_get_context("deploy_aws_ebs_csi") == "True"):
+        if (self.node.try_get_context("deploy_aws_ebs_csi") == "True" and self.node.try_get_context("fargate_only_cluster") == "False"):
             awsebscsidriver_service_account = eks_cluster.add_service_account(
                 "awsebscsidriver",
                 name="awsebscsidriver",
@@ -672,7 +690,7 @@ class EKSClusterStack(core.Stack):
                 awsebscsidriver_service_account)
 
         # AWS EFS CSI Driver
-        if (self.node.try_get_context("deploy_aws_efs_csi") == "True"):
+        if (self.node.try_get_context("deploy_aws_efs_csi") == "True" and self.node.try_get_context("fargate_only_cluster") == "False"):
             awsefscsidriver_service_account = eks_cluster.add_service_account(
                 "awsefscsidriver",
                 name="awsefscsidriver",
@@ -747,7 +765,7 @@ class EKSClusterStack(core.Stack):
                 awsefscsidriver_service_account)
 
         # Cluster Autoscaler
-        if (self.node.try_get_context("deploy_cluster_autoscaler") == "True"):
+        if (self.node.try_get_context("deploy_cluster_autoscaler") == "True" and self.node.try_get_context("fargate_only_cluster") == "False"):
             clusterautoscaler_service_account = eks_cluster.add_service_account(
                 "clusterautoscaler",
                 name="clusterautoscaler",
@@ -869,6 +887,14 @@ class EKSClusterStack(core.Stack):
                     os_access_policy_statement_json_1)]
             )
 
+            # Output the OpenSearch Dashboards address in our CloudFormation Stack
+            core.CfnOutput(
+                self, "OpenSearchDashboardsAddress",
+                value="https://" + os_domain.domain_endpoint + "/_dashboards/",
+                description="Private endpoint for this EKS environment's OpenSearch to consume the logs",
+
+            )
+
             # Create the Service Account
             fluentbit_service_account = eks_cluster.add_service_account(
                 "fluentbit",
@@ -879,7 +905,7 @@ class EKSClusterStack(core.Stack):
             fluentbit_policy_statement_json_1 = {
                 "Effect": "Allow",
                 "Action": [
-                    "es:ESHttp*"
+                    "es:*"
                 ],
                 "Resource": [
                     os_domain.domain_arn
@@ -914,14 +940,6 @@ class EKSClusterStack(core.Stack):
             )
             fluentbit_chart.node.add_dependency(fluentbit_service_account)
 
-            # Output the OpenSearch Dashboards address in our CloudFormation Stack
-            core.CfnOutput(
-                self, "OpenSearchDashboardsAddress",
-                value="https://" + os_domain.domain_endpoint + "/_dashboards/",
-                description="Private endpoint for this EKS environment's OpenSearch to consume the logs",
-
-            )
-
         # Metrics Server (required for the Horizontal Pod Autoscaler (HPA))
         if (self.node.try_get_context("deploy_metrics_server") == "True"):
             # For more info see https://github.com/bitnami/charts/tree/master/bitnami/metrics-server
@@ -941,7 +959,7 @@ class EKSClusterStack(core.Stack):
             )
 
         # Calico to enforce NetworkPolicies
-        if (self.node.try_get_context("deploy_calico_np") == "True"):
+        if (self.node.try_get_context("deploy_calico_np") == "True" and self.node.try_get_context("fargate_only_cluster") == "False"):
             # For more info see https://docs.aws.amazon.com/eks/latest/userguide/calico.html
 
             # First we need to install the Calico Operator components out of the calico-operator.yaml file
@@ -965,22 +983,6 @@ class EKSClusterStack(core.Stack):
             calico_crs_manifest = eks_cluster.add_manifest(
                 "CalicoCRS", calico_crs_yaml.pop(0))
             calico_crs_manifest.node.add_dependency(calico_operator_manifest)
-
-        # SSM Agent
-        if (self.node.try_get_context("deploy_ssm_agent") == "True"):
-            # For more information see https://github.com/aws-samples/ssm-agent-daemonset-installer
-            # Import ssm-agent.yaml to a list of dictionaries and submit them as a manifest to EKS
-            # Read the YAML file
-            ssm_agent_yaml_file = open("ssm-agent.yaml", 'r')
-            ssm_agent_yaml = list(yaml.load_all(
-                ssm_agent_yaml_file, Loader=yaml.FullLoader))
-            ssm_agent_yaml_file.close()
-            loop_iteration = 0
-            for value in ssm_agent_yaml:
-                # print(value)
-                loop_iteration = loop_iteration + 1
-                manifest_id = "SSMAgent" + str(loop_iteration)
-                eks_cluster.add_manifest(manifest_id, value)
 
         # Bastion Instance
         if (self.node.try_get_context("deploy_bastion") == "True"):
@@ -1169,13 +1171,13 @@ class EKSClusterStack(core.Stack):
         # CloudWatch Container Insights - Logs
         if (self.node.try_get_context("deploy_cloudwatch_container_insights_logs") == "True"):
             # Create the Service Account
-            cwlogs_service_account = eks_cluster.add_service_account(
-                "aws-for-fluent-bit-service-account",
-                name="aws-for-fluent-bit",
+            fluentbit_cw_service_account = eks_cluster.add_service_account(
+                "fluentbit-cw",
+                name="fluentbit-cw",
                 namespace="kube-system"
             )
 
-            cwlogs_policy_statement_json_1 = {
+            fluentbit_cw_policy_statement_json_1 = {
                 "Effect": "Allow",
                 "Action": [
                     "logs:PutLogEvents",
@@ -1189,38 +1191,31 @@ class EKSClusterStack(core.Stack):
             }
 
             # Add the policies to the service account
-            cwlogs_service_account.add_to_policy(
-                iam.PolicyStatement.from_json(cwlogs_policy_statement_json_1))
+            fluentbit_cw_service_account.add_to_policy(
+                iam.PolicyStatement.from_json(fluentbit_cw_policy_statement_json_1))
 
-            # For more info check out https://github.com/aws/eks-charts/tree/master/stable/aws-for-fluent-bit
-            fluentbit_chart_cwlogs = eks_cluster.add_helm_chart(
-                "aws-for-fluent-bit",
-                chart="aws-for-fluent-bit",
-                version="0.1.11",
-                release="aws-for-fluent-bit",
-                repository="https://aws.github.io/eks-charts",
+            # For more info check out https://github.com/fluent/helm-charts/tree/main/charts/fluent-bit
+            # Matched the config suggsted for Fargate for consistency https://docs.aws.amazon.com/eks/latest/userguide/fargate-logging.html
+            fluentbit_chart_cw = eks_cluster.add_helm_chart(
+                "fluentbit-cw",
+                chart="fluent-bit",
+                version="0.19.1",
+                release="fluent-bit-cw",
+                repository="https://fluent.github.io/helm-charts",
                 namespace="kube-system",
                 values={
                     "serviceAccount": {
                         "create": False,
-                        "name": "aws-for-fluent-bit"
+                        "name": "fluentbit-cw"
                     },
-                    "cloudWatch": {
-                        "region": self.region,
-                        "logRetentionDays": self.node.try_get_context("cloudwatch_container_insights_logs_retention_days")
-                    },
-                    "firehose": {
-                        "enabled": False
-                    },
-                    "kinesis": {
-                        "enabled": False
-                    },
-                    "elasticsearch": {
-                        "enabled": False
+                    "config": {
+                        "outputs": "[OUTPUT]\n    Name cloudwatch_logs\n    Match   *\n    region " + self.region + "\n    log_group_name fluent-bit-cloudwatch\n    log_stream_prefix from-fluent-bit-\n    auto_create_group true\n    log_retention_days " + str(self.node.try_get_context("cloudwatch_container_insights_logs_retention_days")) + "\n",
+                        "customParsers": "[PARSER]\n    Name crio\n    Format Regex\n    Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>P|F) (?<log>.*)$\n    Time_Key    time\n    Time_Format %Y-%m-%dT%H:%M:%S.%L%z\n",
+                        "filters": "[FILTER]\n    Name parser\n    Match *\n    Key_name log\n    Parser crio\n    Reserve_Data On\n    Preserve_Key On\n"
                     }
                 }
             )
-            fluentbit_chart_cwlogs.node.add_dependency(cwlogs_service_account)
+            fluentbit_chart_cw.node.add_dependency(fluentbit_service_account)
 
         # Security Group for Pods
         if (self.node.try_get_context("deploy_sg_for_pods") == "True"):
@@ -1311,12 +1306,12 @@ class EKSClusterStack(core.Stack):
                 }
             )
             # This depends both on the service account and the patches to the existing CNI resources having been done first
-            sg_pods_chart.node.add_dependency(cwlogs_service_account)
+            sg_pods_chart.node.add_dependency(sg_pods_service_account)
             for patch in patches:
                 sg_pods_chart.node.add_dependency(patch)
 
         # Secrets Manager CSI Driver
-        if (self.node.try_get_context("deploy_secretsmanager_csi") == "True"):
+        if (self.node.try_get_context("deploy_secretsmanager_csi") == "True" and self.node.try_get_context("fargate_only_cluster") == "False"):
             # For more information see https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_csi_driver.html
 
             # First we install the Secrets Store CSI Driver Helm Chart
@@ -1426,7 +1421,7 @@ class EKSClusterStack(core.Stack):
             )
 
         # Kubecost
-        if (self.node.try_get_context("deploy_kubecost") == "True"):
+        if (self.node.try_get_context("deploy_kubecost") == "True" and self.node.try_get_context("fargate_only_cluster") == "False"):
             # For more information see https://www.kubecost.com/install#show-instructions
             # And https://github.com/kubecost/cost-analyzer-helm-chart/tree/master
 
@@ -1529,6 +1524,8 @@ class EKSClusterStack(core.Stack):
 
             # Install Prometheus with a low 1 hour local retention to ship the metrics to the AMP
             # For more information see https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus
+            # NOTE Changed this to not use EBS PersistentVolumes so it'll work with Fargate Only Clusters
+            # This should be acceptable as the metrics are immediatly streamed to the AMP
             amp_prometheus_chart = eks_cluster.add_helm_chart(
                 "prometheus-chart",
                 chart="prometheus",
@@ -1553,6 +1550,15 @@ class EKSClusterStack(core.Stack):
                         }
                     },
                     "server": {
+                        "resources": {
+                            "limits": {
+                                "cpu": 1,
+                                "memory": "1Gi"
+                            }
+                        },
+                        "persistentVolume": {
+                            "enabled": False
+                        },
                         "remoteWrite": [{
                             "queue_config": {
                                 "max_samples_per_send": 1000,
@@ -1564,12 +1570,9 @@ class EKSClusterStack(core.Stack):
                                 "region": self.region
                             }
                         }],
-                        "statefulSet": {
-                            "enabled": True
-                        },
                         "retention": "1h"
                     },
-                    "alertmanger": {
+                    "alertmanager": {
                         "enabled": False
                     },
                     "pushgateway": {
@@ -1584,6 +1587,9 @@ class EKSClusterStack(core.Stack):
             # Install a self-managed Grafana to visualise the AMP metrics
             # NOTE You likely want to use the AWS Managed Grafana (AMG) in production
             # We are using this as AMG requires SSO/SAML and is harder to include in the template
+            # NOTE We are not enabling PersistentVolumes to allow this to run in Fargate making this immutable
+            # Any changes to which dashboards to use should be deployed via the ConfigMaps in order to persist
+            # https://github.com/grafana/helm-charts/tree/main/charts/grafana#sidecar-for-dashboards
             # For more information see https://github.com/grafana/helm-charts/tree/main/charts/grafana
             amp_grafana_chart = eks_cluster.add_helm_chart(
                 "amp-grafana-chart",
@@ -1611,11 +1617,6 @@ class EKSClusterStack(core.Stack):
                             "service.beta.kubernetes.io/aws-load-balancer-type": "nlb-ip",
                             "service.beta.kubernetes.io/aws-load-balancer-internal": "true"
                         }
-                    },
-                    "persistence": {
-                        "enabled": True,
-                        "type": "statefulset",
-                        "storageClassName": "gp2"
                     },
                     "datasources": {
                         "datasources.yaml": {
@@ -1651,12 +1652,172 @@ class EKSClusterStack(core.Stack):
             grafana_dashboards_yaml = list(yaml.load_all(
                 grafana_dashboards_yaml_file, Loader=yaml.FullLoader))
             grafana_dashboards_yaml_file.close()
+            loop_iteration = 0
             for value in grafana_dashboards_yaml:
                 # print(value)
                 loop_iteration = loop_iteration + 1
                 manifest_id = "GrafanaDashboard" + str(loop_iteration)
                 grafana_dashboard_manifest = eks_cluster.add_manifest(
                     manifest_id, value)
+
+        # Run everything via Fargate (i.e. no EC2 Nodes/Managed Node Group)
+        # NOTE: You need to add any namespaces other than kube-system and default to this
+        # OR create additional Fargate Profiles with the additional namespaces/labels
+        if (self.node.try_get_context("fargate_only_cluster") == "True"):
+            # Remove the annotation on CoreDNS forcing it onto EC2 (so it can run on Fargate)
+            coredns_fargate_patch = eks.KubernetesPatch(
+                self, "CoreDNSFargatePatch",
+                cluster=eks_cluster,
+                resource_name="deployment/coredns",
+                resource_namespace="kube-system",
+                apply_patch={
+                    "spec": {
+                        "template": {
+                            "metadata": {
+                                "annotations": {
+                                    "eks.amazonaws.com/compute-type": "fargate"
+                                }
+                            }
+                        }
+                    }
+                },
+                restore_patch={
+                    "spec": {
+                        "template": {
+                            "metadata": {
+                                "annotations": {
+                                    "eks.amazonaws.com/compute-type": "ec2"
+                                }
+                            }
+                        }
+                    }
+                },
+                patch_type=eks.PatchType.STRATEGIC
+            )
+
+            # Set up a Fargate profile covering both the kube-system and default namespaces
+            default_fargate_profile = eks_cluster.add_fargate_profile(
+                "DefaultFargateProfile",
+                fargate_profile_name="default",
+                pod_execution_role=fargate_pod_execution_role,
+                selectors=[eks.Selector(
+                    namespace="kube-system",), eks.Selector(namespace="default")]
+            )
+
+            # The enabling of logs fails if the Fargate Profile is getting created
+            # Tried the to make the Fargate Profile depend on the Logs CustomResource and
+            # that didn't fix it (I guess that returns COMPLETE before done). However,
+            # flipping it the other way and making the Logs depend on the Fargate worked
+            eks_logs_custom_resource.node.add_dependency(
+                default_fargate_profile)
+
+        # Send Fargate logs to CloudWatch Logs
+        if (self.node.try_get_context("fargate_logs_to_cloudwatch") == "True"):
+            if (self.node.try_get_context("fargate_logs_to_managed_opensearch") == "False"):
+                # See https://docs.aws.amazon.com/eks/latest/userguide/fargate-logging.html
+
+                # Add the relevant IAM policy to the Fargate Pod Execution Role
+                fargate_cw_logs_policy_statement_json_1 = {
+                    "Effect": "Allow",
+                    "Action": [
+                        "logs:PutLogEvents",
+                        "logs:DescribeLogStreams",
+                        "logs:DescribeLogGroups",
+                        "logs:CreateLogStream",
+                        "logs:CreateLogGroup",
+                        "logs:PutRetentionPolicy"
+                    ],
+                    "Resource": "*"
+                }
+                fargate_pod_execution_role.add_to_policy(
+                    iam.PolicyStatement.from_json(fargate_cw_logs_policy_statement_json_1))
+
+                fargate_namespace_manifest = eks_cluster.add_manifest("FargateLoggingNamespace",
+                                                                      {
+                                                                          "kind": "Namespace",
+                                                                          "apiVersion": "v1",
+                                                                          "metadata": {
+                                                                              "name": "aws-observability",
+                                                                              "labels": {
+                                                                                  "aws-observability": "enabled"
+                                                                              }
+                                                                          }
+                                                                      }
+                                                                      )
+
+                fargate_fluentbit_manifest_cw = eks_cluster.add_manifest("FargateLoggingCW",
+                                                                         {
+                                                                             "kind": "ConfigMap",
+                                                                             "apiVersion": "v1",
+                                                                             "metadata": {
+                                                                                 "name": "aws-logging",
+                                                                                 "namespace": "aws-observability"
+                                                                             },
+                                                                             "data": {
+                                                                                 "output.conf": "[OUTPUT]\n    Name cloudwatch_logs\n    Match   *\n    region " + self.region + "\n    log_group_name fluent-bit-cloudwatch\n    log_stream_prefix from-fluent-bit-\n    auto_create_group true\n    log_retention_days " + str(self.node.try_get_context("cloudwatch_container_insights_logs_retention_days")) + "\n",
+                                                                                 "parsers.conf": "[PARSER]\n    Name crio\n    Format Regex\n    Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>P|F) (?<log>.*)$\n    Time_Key    time\n    Time_Format %Y-%m-%dT%H:%M:%S.%L%z\n",
+                                                                                 "filters.conf": "[FILTER]\n   Name parser\n   Match *\n   Key_name log\n   Parser crio\n   Reserve_Data On\n   Preserve_Key On\n"
+                                                                             }
+                                                                         }
+                                                                         )
+                fargate_fluentbit_manifest_cw.node.add_dependency(
+                    fargate_namespace_manifest)
+            else:
+                print("You need to set only one destination for Fargate Logs to True")
+
+        # Send Fargate logs to the managed OpenSearch
+        # NOTE This is of limited usefulness without the Kubernetes filter to enrich it with k8s metadata
+        # This is on the roadmap see https://github.com/aws/containers-roadmap/issues/1197
+        # At the moment better to use CloudWatch logs which seperates by source logstream and onward
+        # stream from that to OpenSearch?
+
+        if (self.node.try_get_context("fargate_logs_to_managed_opensearch") == "True"):
+            if (self.node.try_get_context("fargate_logs_to_cloudwatch") == "False"):
+                # See https://docs.aws.amazon.com/eks/latest/userguide/fargate-logging.html
+
+                # Add the relevant IAM policy to the Fargate Pod Execution Role
+                fargate_os_policy_statement_json_1 = {
+                    "Effect": "Allow",
+                    "Action": [
+                        "es:*"
+                    ],
+                    "Resource": [
+                        os_domain.domain_arn
+                    ]
+                }
+                fargate_pod_execution_role.add_to_policy(
+                    iam.PolicyStatement.from_json(fargate_os_policy_statement_json_1))
+
+                fargate_namespace_manifest = eks_cluster.add_manifest("FargateLoggingNamespace",
+                                                                      {
+                                                                          "kind": "Namespace",
+                                                                          "apiVersion": "v1",
+                                                                          "metadata": {
+                                                                              "name": "aws-observability",
+                                                                              "labels": {
+                                                                                  "aws-observability": "enabled"
+                                                                              }
+                                                                          }
+                                                                      }
+                                                                      )
+
+                fargate_fluentbit_manifest_os = eks_cluster.add_manifest("FargateLoggingOS",
+                                                                         {
+                                                                             "kind": "ConfigMap",
+                                                                             "apiVersion": "v1",
+                                                                             "metadata": {
+                                                                                 "name": "aws-logging",
+                                                                                 "namespace": "aws-observability"
+                                                                             },
+                                                                             "data": {
+                                                                                 "output.conf": "[OUTPUT]\n  Name  es\n  Match *\n  AWS_Region "+self.region+"\n  AWS_Auth On\n  Host "+os_domain.domain_endpoint+"\n  Port 443\n  TLS On\n  Replace_Dots On\n  Logstash_Format On\n"
+                                                                             }
+                                                                         }
+                                                                         )
+                fargate_fluentbit_manifest_os.node.add_dependency(
+                    fargate_namespace_manifest)
+            else:
+                print("You need to set only one destination for Fargate Logs to True")
 
 
 app = core.App()
