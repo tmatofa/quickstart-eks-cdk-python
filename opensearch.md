@@ -1,10 +1,12 @@
 # Deploy and connect to OpenSearch for log search and visualisation
 
+If you set `deploy_managed_opensearch` to `True` in `cluster-bootstrap/cdk.json` then the template will deploy a managed OpenSerach as well as a Fluent Bit shipping your logs to it.
+
 We put the OpenSearch both in the VPC (i.e. not on the Internet) as well as in its own Security Group - which will give access by default only from our EKS cluster's SG (so that can ship the logs to it) as well as to from our (optional) Client VPN's Security Group to allow us access OpenSearch Dashboards when on VPN.
 
 Since this OpenSearch can only be reached if you are both within the private VPC network *and* allowed by this Security Group, then it is low risk to allow 'open access' to it - especially in a Proof of Concept (POC) environment. As such, we've configured its default access policy so that no login and password and are required - choosing to control access to it from a network perspective instead.
 
-For production use, though, you'd likely want to consider implementing Cognito to facilitate authentication/authorization for user access to OpenSearch Dashboards - https://docs.aws.amazon.com/opensearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam
+For production use, though, you'd likely want to consider implementing Cognito to facilitate authentication/authorization for user access to OpenSearch Dashboards - https://docs.aws.amazon.com/opensearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam. You'd also likley want to consider [sizing it](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/sizing-domains.html) for your needs as well as move to [dedicated master nodes](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/managedomains-dedicatedmasternodes.html) by adjusting the other `opensearch_` parameters in `cdk.json`.
 
 ### Connect to OpenSearch Dashboards and do initial setup
 
