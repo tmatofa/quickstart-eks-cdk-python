@@ -110,10 +110,10 @@ While you can toggle any of the parameters to in a custom configuration, we incl
 **_NOTE:_** This also enables a GitOps pattern where changes merged to the cluster-bootstrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `npx cdk deploy` via web hook.
 
 ## Additional Documentation
-- [Deploy and connect to the Bastion](https://github.com/aws-quickstart/quickstart-eks-cdk-python/bastion.md)
-- [Deploy and connect to the Client VPN](https://github.com/aws-quickstart/quickstart-eks-cdk-python/client-vpn.md)
-- [Deploy and connect to OpenSearch for log search and visualisation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/opensearch.md)
-- [Deploy and connect to Prometheus (AMP) and Grafana for metrics search and visualisation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/amp.md)
-- [Deploy and connect to Kubecost for cost/usage analysis and attribution](https://github.com/aws-quickstart/quickstart-eks-cdk-python/kubecost.md)
-- [Deploy Open Policy Agent (OPA) Gatekeeper and sample policies via the Flux GitOps Operator](https://github.com/aws-quickstart/quickstart-eks-cdk-python/gatekeeper.md)
-- [Upgrading your EKS Cluster and add-ons via the CDK](https://github.com/aws-quickstart/quickstart-eks-cdk-python/upgrades.md)
+- [Deploy and connect to the Bastion](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/bastion.md)
+- [Deploy and connect to the Client VPN](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/client-vpn.md)
+- [Deploy and connect to OpenSearch for log search and visualisation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/opensearch.md)
+- [Deploy and connect to Prometheus (AMP) and Grafana for metrics search and visualisation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/amp.md)
+- [Deploy and connect to Kubecost for cost/usage analysis and attribution](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/kubecost.md)
+- [Deploy Open Policy Agent (OPA) Gatekeeper and sample policies via the Flux GitOps Operator](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/gatekeeper.md)
+- [Upgrading your EKS Cluster and add-ons via the CDK](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/upgrades.md)
