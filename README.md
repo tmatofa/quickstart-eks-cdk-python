@@ -117,3 +117,4 @@ While you can toggle any of the parameters to in a custom configuration, we incl
 - [Deploy and connect to Kubecost for cost/usage analysis and attribution](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/kubecost.md)
 - [Deploy Open Policy Agent (OPA) Gatekeeper and sample policies via the Flux GitOps Operator](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/gatekeeper.md)
 - [Upgrading your EKS Cluster and add-ons via the CDK](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/upgrades.md)
+- [Deploying a few included demo/sample applications showing how to use the various add-ons](https://github.com/aws-quickstart/quickstart-eks-cdk-python/tree/main/demo-apps#readme)
