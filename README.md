@@ -89,7 +89,9 @@ While you can toggle any of the parameters to in a custom configuration, we incl
 
 ## How to deploy via CodeBuild
 
-1. Fork this [Git Repo](https://github.com/aws-quickstart/quickstart-eks-cdk-python) to your own GitHub account - for instruction see https://docs.github.com/en/get-started/quickstart/fork-a-repo.
+1. Fork this [Git Repo](https://github.com/aws-quickstart/quickstart-eks-cdk-python) to your own GitHub account - for instruction see https://docs.github.com/en/get-started/quickstart/fork-a-repo
+1. Generate a personal access token on GitHub - https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token 
+1. Run `aws codebuild import-source-credentials --server-type GITHUB --auth-type PERSONAL_ACCESS_TOKEN --token <token_value>` to provide your token to CodeBuild
 1. Select which of the [three cdk.json files](#the-three-cdkjson-sets-of-parameters) (cdk.json.default, cdk.json.community or cdk.json.fargate) you'd like as a base and copy that over the top of `cdk.json` in the `cluster-bootstrap/` folder.
 1. Edit the `cdk.json` file to further customise it to your environment. For example:
     - If you want to use an existing IAM Role to administer the cluster intsead of creating a new one (which you'll then have to assume to administer the cluster) set `create_new_cluster_admin_role` to False and then add the ARN for your role in `existing_admin_role_arn`
@@ -102,6 +104,10 @@ While you can toggle any of the parameters to in a custom configuration, we incl
 1. Find and replace `https://github.com/aws-quickstart/quickstart-eks-cdk-python.git` with the address to your GitHub fork in [cluster-codebuild/EKSCodeBuildStack.template.json](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-codebuild/EKSCodeBuildStack.template.json)
 1. (Only if you are not using the main branch) Find and replace `main` with the name of your branch.
 1. Go to the the console for the CloudFormation service in the AWS Console and deploy your updated [cluster-codebuild/EKSCodeBuildStack.template.json](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-codebuild/EKSCodeBuildStack.template.json)
+1. Go to the CodeBuild console, click on the Build project that starts with `EKSCodeBuild`, and then click the Start build button.
+1. (Optional) You can click the Tail logs button to follow along with the build process
+
+**_NOTE:_** This also enables a GitOps pattern where changes merged to the cluster-bootstrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `npx cdk deploy` via web hook.
 
 ## Additional Documentation
 - [Deploy and connect to the Bastion](https://github.com/aws-quickstart/quickstart-eks-cdk-python/bastion.md)
