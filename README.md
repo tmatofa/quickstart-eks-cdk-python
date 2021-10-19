@@ -3,244 +3,111 @@
 > **DEVELOPER PREVIEW NOTE:** This project is currently available as a preview and should not be considered for production use at this time. 
 
 
-This Quick Start is a reference architecture and implementation of how you can use the Cloud Development Kit (CDK) to orchestrate the Elastic Kubernetes Service (EKS) to quickly deploy a more complete and "production ready" Kubernetes environment on AWS.
-
-## What does this Quick Start create for you:
-
-1. An appropriate VPC with public and private subnets across three availability zones.
-    1. This defaults to a /22 CIDR w/1024 IPs by default - though this can be adjusted in `cluster-bootstrap/cdk.json` with the parameters `vpc_cidr`, `vpc_cidr_mask_public` and `vpc_cidr_mask_private`.
-    1. Alternatively, just flip `create_new_vpc` to `False` and then specify the name of your VPC under `existing_vpc_name` in `cluster-bootstrap/cdk.json` to use an existing VPC. CDK will automatically work out which subnets are public and which are private and deploy to the private ones.
-        1. Note that if you do this you'll also have to tag your subnets as per https://aws.amazon.com/premiumsupport/knowledge-center/eks-vpc-subnet-discovery/
-1. A new EKS cluster with:
-    1. A dedicated new IAM role only used to create it and own it. 
-        1. This is important as the role that creates the cluster is a permanent, and rather hidden, full admin role that doesn't appear in nor is subject to the `aws-auth` ConfigMap. So you want to treat it like the AWS Root Account for this cluster and only use it if required (e.g. to fix the aws-auth ConfigMap should it become corrupted).
-    1. A new dedicated role to Administer it (which *IS* via the `aws-auth` ConfigMap) as per https://docs.aws.amazon.com/eks/latest/userguide/add-user-role.html
-        1. Alternatively, you can specify an existing role ARN to make the administrator by flipping to `False` in `create_new_cluster_admin_role` and then putting the arn to use in `existing_admin_role_arn` in `cluster-bootstrap/cdk.json`.
-            1. NOTE that if you bring an existing role that this role will get assigned to the Bastion by default as well (so that the Bastion can manage the cluster). This means that you need to:
-                1. Allow ec2.amazonaws.com to sts:AssumeRole this role (your Bastion)
-                1. Add the Managed Policy `AmazonSSMManagedInstanceCore` to this role (so that your Bastion can register with SSM via this role)
-    1. A new Managed Node Group with 2 x m5.large instances spread across 3 Availability Zones.
-        1. You can change the instance type and quantity by changing `eks_node_quantity` and/or `eks_node_instance_type` in `cluster-bootstrap/eks-cluster.py`.
-        1. You can also have it be via Spot rather than OnDemand by setting `eks_node_spot` to True.
-    3. All control plane logging to CloudWatch Logs enabled (defaulting to 1 month's retention within CloudWatch Logs).
-1. Ingress and AWS Load Balancer integration
-    1. The AWS Load Balancer Controller (https://kubernetes-sigs.github.io/aws-load-balancer-controller) to allow you to seamlessly use ALBs for Ingress and NLB for Services.
-1. External DNS (https://github.com/kubernetes-sigs/external-dns) to allow you to automatically create/update Route53 entries to point your 'real' names at your Ingresses and Services.
-1. Observability
-    1. CloudWatch Container Insights - Metrics
-    1. (Optional) AWS Managed Prometheus and self-managed Grafana
-        1. We create a new AMP Workspace
-        1. We install a local prometheus with a low local retention of 1 hour to collect and ship the cluster's metrics to that AMP Workspace
-        1. We install a self-managed Grafana on the cluster to visualize the metrics in AMP. 
-            1. This is because the AWS Managed Grafana (AMG) is more difficult to automate provisioning of in a template like this given it requires federation to an external identity provider or AWS SSO etc. In production you likely do want to use AMG instead - which is why we make this self-managed a separate option to the AMG.
-    1. CloudWatch Container Insights - Logs
-    1. (Optional) AWS managed OpenSearch (successor to Elasticsearch) and OpenSearch Dashboards (successor to Kibana) - Logs 
-        1. If you flip `deploy_managed_opensearch` to True this creates a new managed Amazon OpenSearch Domain behind a private VPC endpoint as well as a fluent-bit DaemonSet to ship all your container logs there - including enriching them with the Kubernetes metadata using the kubernetes fluent-bit filter.
-        1. Note that this provisions a single node 10GB managed OpenSearch Domain suitable for a proof of concept. To use this in production you'll likely need to edit the `es_capacity` section of `cluster-bootstrap/cdk.json` to scale this out from a capacity and availability perspective. For more information see https://docs.aws.amazon.com/opensearch-service/latest/developerguide/sizing-domains.html.
-        1. Note that this provisions an OpenSearch and OpenSearch Dashboards that does not have a login/password configured. It is secured instead by network access controlled by it being in a private subnet and its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment, for production use you'd want to consider implementing Cognito to control user access to OpenSearch Dashboards - https://docs.aws.amazon.com/opensearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam.
-
-1. CSI Drivers
-    1. The AWS EBS CSI Driver (https://github.com/kubernetes-sigs/aws-ebs-csi-driver). Note that new development on EBS functionality has moved out of the Kubernetes mainline to this externalized CSI driver.
-    1. The AWS EFS CSI Driver (https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html). Note that new development on EFS functionality has moved out of the Kubernetes mainline to this externalized CSI driver.
-    1. (Optional) Kubernetes Secrets Store CSI Driver (https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_csi_driver.html and https://secrets-store-csi-driver.sigs.k8s.io/)
-1. Security and Governance
-    1. Security Groups for Pods (https://docs.aws.amazon.com/eks/latest/userguide/security-groups-for-pods.html). This sets the CNI to provision an full ENI for every Pod and then allows you to define SecurityGroupPolicy documents that tell the CNI which one or more Security Groups to apply to those ENIs based on Kubernetes label selectors.
-    1. (Optional) The Calico Network Policy Provider (https://docs.aws.amazon.com/eks/latest/userguide/calico.html). This enforces any [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) that you specify.
-        1. NOTE: Traffic flow to and from pods with associated security groups are not subjected to Calico network policy enforcement and are limited to Amazon EC2 security group enforcement only. Community effort is underway to remove this limitation. But, until then, you have to choose either Security Groups for Pods **OR** Calico/Network Policies. If enabling this then also disable Security Groups for Pods in `cdk.json`. 
-    1. (Optional) An OPA Gatekeeper to enforce preventative security and operational policies (https://github.com/open-policy-agent/gatekeeper). A set of example policies is provided as well - see `gatekeeper-policies/README.md`
-    1. (Optional) The Kubernetes External Secrets Operator (https://github.com/external-secrets/kubernetes-external-secrets). This replicates secrets from things like Parameter Store and Secrets Manager one-way into Kubernetes secrets.
-1. Autoscaling
-    1. The cluster autoscaler (CA) (https://github.com/kubernetes/autoscaler). This will scale your EC2 instances to ensure you have enough capacity to launch all of your Pods as they are deployed/scaled.
-    1. The metrics-server (required for the Horizontal Pod Autoscaler (HPA)) (https://github.com/kubernetes-sigs/metrics-server)
-1. The AWS Systems Manager (SSM) agent. This allows for various management activities (e.g. Inventory, Patching, Session Manager, etc.) of your Instances/Nodes by AWS Systems Manager.
-1. (Optional) Kubecost - Kubecost provides real-time cost visibility and insights for teams using Kubernetes, helping you continuously reduce your cloud costs. In addition to providing a SaaS-based offering, Kubecost has opensourced the core of their offering such that you can run it yourself. We describe this in this blog post - https://aws.amazon.com/blogs/containers/how-to-track-costs-in-multi-tenant-amazon-eks-clusters-using-kubecost/.
-    1. Note that you need to go to https://www.kubecost.com/install#show-instructions and get your kubecostToken for free by registering your email address. You need to specify this in cdk.json when you enable the add-on.
-    1. Note that this provisions a Kubecost that does not have a login/password configured. It is secured instead by network access controlled by it being in a private subnet and its security group. While this is acceptable for the creation of a Proof of Concept (POC) environment you might want to wrap it behind an authenticated proxy or otherwise secure access to it in a production deployment - or consider using the Kubecost managed SaaS product.
-
-The items listed as (Optional) above are not enabled by default - but all of the add-ons are really optional and you control whether you'll get them with a parameter for each in  `cluster-bootstrap/cdk.json` that you flip to True/False.
-
-### Why Cloud Development Kit (CDK)?
-
-The Cloud Development Kit (CDK) is a tool where you can write infrastructure-as-code with 'actual' code (TypeScript, Python, C#, and Java). This takes these languages and 'compiles' them into a CloudFormation template for the AWS CloudFormation engine to then deploy and manage as stacks.
-
-When you develop and deploy infrastructure with the CDK you don't edit the intermediate CloudFormation but, instead, let CDK regenerate it in response to changes in the upstream CDK code.
-
-What makes CDK uniquely good when it comes to our EKS Quick Start is:
-
-* It handles the IAM Roles for Service Accounts (IRSA) rather elegantly and creates the IAM Roles and Policies, creates the Kubernetes service accounts, and then maps them to each other.
-* It has implemented custom CloudFormation resources with Lambda invoking kubectl and helm to deploy manifests and charts as part of the cluster provisioning.
-    * Until we have [Managed Add-Ons](https://aws.amazon.com/blogs/containers/introducing-amazon-eks-add-ons/) for the common things with EKS like the above this can fill the gap and provision us a complete cluster with all the add-ons we need.
-
-## Getting started
-
-You can either deploy this from your machine or leverage CodeBuild. The advantage of using CodeBuild is it also sets up a 'GitOps' approach where when you merge changes to
-the cluster-bootstrap folder it'll (re)run `npx cdk deploy` for you. This means that to update the cluster you just change this file and merge. 
-
-###  Deploy from CodeBuild
-To use the CodeBuild CloudFormation Template:
-
-1. Generate a personal access token on GitHub - https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token 
-1. Edit `cluster-codebuild/EKSCodeBuildStack.template.json` to change Location to your GitHub repo/path
-1. Run `aws codebuild import-source-credentials --server-type GITHUB --auth-type PERSONAL_ACCESS_TOKEN --token <token_value>` to provide your token to CodeBuild
-1. Deploy `cluster-codebuild/EKSCodeBuildStack.template.json`
-1. Go to the CodeBuild console, click on the Build project that starts with `EKSCodeBuild`, and then click the Start build button.
-1. (Optional) You can click the Tail logs button to follow along with the build process
-
-**_NOTE:_** This also enables a GitOps pattern where changes to the cluster-bootstrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `npx cdk deploy` via web hook.
-
-### Deploy from your laptop
-
-Alternatively, you can deploy from any machine (your laptop, a bastion EC2 instance, etc.).
-
-There are some prerequisites you likely will need to install on the machine doing your environment bootstrapping including Node, Python, the AWS CLI, the CDK, fluxctl and Helm
-
-#### Pre-requisites - Ubuntu 20.04.2 LTS (including via Windows 10's WSL)
-
-Run `sudo ./ubuntu-prereqs.sh`
-
-#### Pre-requisites - Mac
-
-1. Install Homebrew (https://brew.sh/)
-1. Run `./mac-prereqs.sh`
-
-#### Deploy from CDK locally
-
-1. Make sure that you have your AWS CLI configured with administrative access to the AWS account in question (e.g. an `aws s3 ls` works)
-    1. This can be via setting your access key and secret in your .aws folder via `aws configure` or in your environment variables by copy and pasting from AWS SSO etc.
-1. Run `cd quickstart-eks-cdk-python/cluster-bootstrap`
-2. Run `npm install` to install the exact version of the CDK this has been tested with (locally in the node_modules folder)
-3. Run `pip3 install --user --upgrade -r requirements.txt` to install the required Python bits of the CDK (locked to the same exact CDK version)
-4. Run `export CDK_DEPLOY_REGION=ap-southeast-2` replacing ap-southeast-2 with your region of choice
-5. Run `export CDK_DEPLOY_ACCOUNT=123456789123` replacing 123456789123 with your AWS account number
-6. (Optional) If you want to make an existing IAM User or Role the cluster admin rather than creating a new one then edit `cluster-bootstrap/cdk.json` and comment out the current cluster_admin_role and uncomment the one beneath it and fill in the ARN of the User/Role you'd like there.
-7. (Only required the first time you use the CDK in this account) Run `cdk bootstrap` to create the S3 bucket where it puts the CDK puts its artifacts
-8. (Only required the first time OpenSearch in VPC mode is used in this account) Run `aws iam create-service-linked-role --aws-service-name es.amazonaws.com`
-9. Run `npx cdk deploy --require-approval never`
-
-### (Optional) Deploy Open Policy Agent (OPA) Gatekeeper and the policies via Flux v2
-
-The `gatekeeper` folder contains the manifests to deploy [Gatekeeper's Helm Chart](https://github.com/open-policy-agent/gatekeeper/tree/master/charts/gatekeeper) as well as an example set of policies to help achieve a much better security and noisy neighbor situation - especially if doing multi-tenancy. See more about these example policies in `gatekeeper/README.md`.
-
-This also serves as an example of how to use Flux v2 with EKS.
-
-In order to deploy Gatekeeper and the example policies:
-1. Ensure you are on a system where `kubectl` is installed and working against the cluster (like the bastion)
-1. [Install the Flux v2 CLI](https://fluxcd.io/docs/installation/#install-the-flux-cli)
-1. Run `flux install` to install Flux onto the cluster
-1. Change directory into the root of quickstart-eks-cdk-python
-1. Run `kubectl apply -f gatekeeper/gatekeeper-sync.yaml` to install the Gatekeeper Helm Chart w/Flux (as well as enable future GitOps if the main branch of the repo is updated)
-1. Run `flux get all` to see the progress of getting and installing the Gatekeeper Helm Chart
-1. Run `flux create source git gatekeeper --url=https://github.com/aws-quickstart/quickstart-eks-cdk-python --branch=main` to add this repo to Flux as a source
-    1. Alternatively, and perhaps advisably, specify the URL of your git repo you've forked/cloned the project to instead - as it will trigger GitOps actions going forward when this changes!
-1. Run `kubectl apply -f gatekeeper/policies/policies-sync.yaml` to install the policies with Flux (as well as enable future GitOps if the main branch of the repo is updated)
-1. Run `flux get all` to see all of the Flux items and their reconciliation statuses
-
-If you want to change any of the Gatekeeper Constraints or ConstraintTemplates you just change the YAML and then push/merge it to the repo and branch you indicated above and Flux will them deploy those changes to your cluster via GitOps.
-
-## Deploy and set up a Bastion based on an EC2 instance accessed securely via Systems Manager's Session Manager
-
-If you set `deploy_bastion` to `True` in `cluster-bootstrap/cdk.json` then the template will deploy an EC2 instance with all the tools to manage your cluster.
-
-To access this bastion:
-1. Go to the Systems Manager Server in the AWS Console
-1. Go to Managed Instances on the left hand navigation pane
-1. Select the instance with the name `EKSClusterStack/CodeServerInstance`
-1. Under the Instance Actions menu on the upper right choose Start Session
-1. Run `aws eks update-kubeconfig --name <cluster name> --region <your region> to populate your ~/.kube/config file
-1. Run `kubectl get nodes` to see that all the tools are there and set up for you!
-
-
-## (Optional) Set up your Client VPN to access the environment
-
-If you set `deploy_vpn` to `True` in `cluster-bootstrap/cdk.json` then the template will deploy a Client VPN so that you can securely access the cluster's private VPC subnets from any machine. You'll need this to be able to reach the OpenSearch Dashboards for your logs and Grafana for your metrics by default (unless you are using an existing VPC where you have already arranged such connectivity)
-
-Note that you'll also need to create client and server certificates and upload them to ACM by following these instructions - https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authentication.html#mutual - and update `ekscluster.py` with the certificate ARNs for this to work.
-
-Once it has created your VPN you then need to configure the client:
-
-1. Open the AWS VPC Console and go to the Client VPN Endpoints on the left panel
-1. Click the Download Client Configuration button
-1. Edit the downloaded file and add:
-    1. A section at the bottom for the server cert in between `<cert>` and `</cert>`
-    1. Then under that another section for the client private key between `<key>` and `</key>` under that
-1. Install the AWS Client VPN Client - https://aws.amazon.com/vpn/client-vpn-download/
-1. Create a new profile pointing it at that configuration file
-1. Connect to the VPN
-
-Once you are connected it is a split tunnel - meaning only the addresses in your EKS VPC will get routed through the VPN tunnel.
-
-You then need to add the EKS cluster to your local kubeconfig by running the command in the clusterConfigCommand Output of the EKSClusterStack.
-
-Then you should be able to run a `kubectl get all -A` and see everything running on your cluster.
-
-## (Optional) How access to OpenSearch and OpenSearch Dashboards if you choose to deploy them
-
-We put the OpenSearch both in the VPC (i.e. not on the Internet) as well as in its own Security Group - which will give access by default only from our EKS cluster's SG (so that can ship the logs to it) as well as to from our (optional) Client VPN's Security Group to allow us access OpenSearch Dashboards when on VPN.
-
-Since this OpenSearch can only be reached if you are both within the private VPC network *and* allowed by this Security Group, then it is low risk to allow 'open access' to it - especially in a Proof of Concept (POC) environment. As such, we've configured its default access policy so that no login and password and are required - choosing to control access to it from a network perspective instead.
-
-For production use, though, you'd likely want to consider implementing Cognito to facilitate authentication/authorization for user access to OpenSearch Dashboards - https://docs.aws.amazon.com/opensearch-service/latest/developerguide/fgac.html#fgac-walkthrough-iam
-
-### Connect to OpenSearch Dashboards and do initial setup
-
-1. Connect to the Client VPN or ensure that you have private network connectivity to the OpenSearch (site-to-site VPN, DirectConnect, etc.)
-1. Go to the OpenSearch service in the AWS Console
-1. Click on the Domain name
-1. Click on the link next to `OpenSearch Dashboards`
-1. Click the `Explore on my own` link
-1. Click the OpenSearch Dashboards blue box / link in the center of the page
-1. Click the blue `Add your data` button
-1. Click the blue `Create index pattern` button
-1. In the Index pattern name box enter `logstash-*` and click Next step
-1. Pick `@timestamp` from the dropdown box and click the `Create index pattern` button
-1. Then click the Hamburger menu in the upper left and choose `Discover`
-
-You should see all of your logs.
-
-TODO: Document how to do a few basic things here re: searching, filtering and visualizing your logs
-
-## (Optional) How to access Prometheus (AMP) via Grafana if you choose to deploy them
-
-We have deployed an in-VPC private Network Load Balancer (NLB) (i.e. Not on the Internet) to access your Grafana service to visualize the metrics from the Prometheus we've deployed onto the cluster.
-
-To access this enter the following command `kubectl get service amp-grafana-nlb --namespace=kube-system` to find the address of this under EXTERNAL-IP. Alternatively, you can find the Grafana NLB in the AWS EC2 console and get its address from there.
-
-The default username is `admin` and you get the initial password by running `kubectl get secrets grafana-for-amp -n kube-system -o jsonpath='{.data.admin-password}'|base64 --decode`. You can change this password as well as create/managed additional users once you are signed in.
-
-We have set up AMP as a datasource and loaded a few sample dashboards for you to visualise the metrics on your EKS cluster:
-* `Cluster Monitoring for Kubernetes` to see cluster and node-level CPU, memory, network IO and free disk space
-* `Kubernetes Metrics - Deployments vs StatefulSets vs DaemonSets` to drill down on your workloads whether they be deployments, statefulsets or daemonsets
-* `Pod Stats & Info` to drill down on everything about a particular Pod
-
-Click the word/link Home on the top of the Grafana page to see a list your Dashboards.
-
-## (Optional) How to access Kubecost should you choose to deploy it
-
-We have deployed an in-VPC private Network Load Balancer (NLB) to access your Kubecost service. There is no login or password - access is controlled from a network perspective.
-
-To access this enter the following command `get service kubecost-nlb --namespace=kube-system` to find the address of this under EXTERNAL-IP. Alternatively, you can find the Kubecost NLB in the AWS EC2 console and get its address from there.
-
-You'll need to have network connectivity via something like the Client VPN, Site-to-Site VPN or DirectConnect to be able to reach it.
-
-## Deploy some sample/demo apps to explore our new Kubernetes environment and its features
-
-Various demo application are in the demo-apps folder showing how to use the various features and add-ons installed by this Quick Start. There is a [README](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/demo-apps/README.md) in that folder with more information about them and how to install them.
-
-## Upgrading your cluster
-
-Since we are explicit both with the EKS Control Plane version as well as the Managed Node Group AMI version upgrading these is simply incrementing these versions, saving `cluster-bootstrap/cdk.json` and then running a `npx cdk deploy`.
-
-As per the [EKS Upgrade Instructions](https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html) you start by upgrading the control plane, then any required add-on versions and then the worker nodes.
-
-Upgrade the control plane by changing `eks_version` in  `cluster-bootstrap/cdk.json`. You can see what to put there by looking at the [CDK documentation for KubernetesVersion](https://docs.aws.amazon.com/cdk/api/latest/python/aws_cdk.aws_eks/KubernetesVersion.html). Then run `npx cdk deploy` - or let the CodeBuild GitOps provided in `cluster-codebuild` do it for you.
-
-Upgrade the worker nodes by updating `eks_node_ami_version` in  `cluster-bootstrap/cdk.json` with the new version. You find the version to type there in the [EKS Documentation](https://docs.aws.amazon.com/eks/latest/userguide/eks-linux-ami-versions.html) as shown here:
-![](eks_ami_version.PNG)
-
-## Upgrading an add-on
-
-Each of our add-ons are deployed via Helm Charts and are explicit about the chart version being deployed. In the comment above each chart version we link to the GitHub repo for that chart where you can see what the current chart version is and can see what changes may have been rolled in since the one cited in the template.
-
-To upgrade the chart version update the chart version to the upstream version you see there, save it and then do a `npx cdk deploy`.
-
-**NOTE:** While we were thinking about parameterizing the chart versions within `cluster-bootstrap/cdk.json`, it is possible as the Chart versions change that the values you have to specify might also change. As such, we have not done so as a reminder that this change might require a bit of research and testing rather than just popping a new version number parameter in and expecting it'll work.
+This Quick Start is a reference architecture and example template on how to use the [AWS Cloud Development Kit (CDK)](https://docs.aws.amazon.com/cdk/latest/guide/home.html) to orchestrate both the provisioning of the [Amazon Elastic Kubernetes Service (EKS)](https://docs.aws.amazon.com/eks/latest/userguide/what-is-eks.html) cluster as well as the [Amazon Virtual Private Cloud (VPC)](https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html) network that it will live in - or letting you specify an existing VPC to use instead. 
+
+When provisioning the cluster it gives the option of either using EC2 worker [Nodes](https://kubernetes.io/docs/concepts/architecture/nodes/) via a [EKS Managed Node Group](https://docs.aws.amazon.com/eks/latest/userguide/managed-node-groups.html), with either [OnDemand or Spot capacity types](https://docs.aws.amazon.com/eks/latest/userguide/managed-node-groups.html#managed-node-group-capacity-types), or building a [Fargate](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html)-only cluster.
+
+It will also help provision various associated add-ons to provide capabilities such as:
+- Integration with the [AWS Network Load Balancer (NLB)](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/introduction.html) for [Services](https://kubernetes.io/docs/concepts/services-networking/service/) and [Appliication Load Balancer (ALB)](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html) for [Ingresses](https://kubernetes.io/docs/concepts/services-networking/ingress/) via the [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.2/#aws-load-balancer-controller).
+- Integration with [Amazon Route 53](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/Welcome.html) via the [ExternalDNS controller](https://github.com/kubernetes-sigs/external-dns).
+- Integration with [Amazon Elastic Block Store (EBS)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AmazonEBS.html) and [Amazon Elastic File System (EFS)](https://docs.aws.amazon.com/efs/latest/ug/whatisefs.html) via the [Kubernetes Container Storage Interface (CSI) Drivers](https://kubernetes-csi.github.io/docs/drivers.html) for them both.
+- Integration with [EC2 Auto Scaling](https://docs.aws.amazon.com/autoscaling/ec2/userguide/AutoScalingGroup.html) of the underlying worker [Nodes](https://kubernetes.io/docs/concepts/architecture/nodes/) via the [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler) - which scales in/out the Nodes to ensure that all of your [Pods](https://kubernetes.io/docs/concepts/workloads/pods/) are schedulable but your cluster is not over-provisioned.
+- Integration with [CloudWatch](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html) for metrics and/or logs for cluster monitoring via [CloudWatch Container Insights](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContainerInsights.html).
+- Integration with [Amazon OpenSearch Service (successor to Amazon Elasticsearch Service)](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/what-is.html) for logs for cluster monitoring - both provisioning the OpenSearch Domain as well as a [Fluent Bit](https://fluentbit.io/) to ship the logs from the cluster to it.
+- Integration with the [Amazon Managed Service for Prometheus (AMP)](https://docs.aws.amazon.com/prometheus/latest/userguide/what-is-Amazon-Managed-Service-Prometheus.html) for cluster metrics and monitoring - both provisioning the AMP Workspace as well as a local short-retention Prometheus on the cluster to collect and push the metrics to it.
+    - This includes an optional local self-hosted [Grafana](https://grafana.com/) to visualise the metrics. You can opt instead to use an [Amazon Managed Grafana](https://docs.aws.amazon.com/grafana/latest/userguide/what-is-Amazon-Managed-Service-Grafana.html) intead in production - but setting that up and pointing it at the AMP is outside the scope of this Quick Start.
+- The [Kubernetes Metrics Server](https://github.com/kubernetes-sigs/metrics-server) which is required for, amoung other things, the [Horizontal Pod Autoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) to work.
+- Integration with [Security Groups](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_SecurityGroups.html) for network firewalling via [Amazon Container Network Interface (CNI)](https://github.com/aws/amazon-vpc-cni-k8s) plugin re-configured to enforce [Security groups for pods](https://docs.aws.amazon.com/eks/latest/userguide/security-groups-for-pods.html).
+- Alternatively, the [Calico](https://docs.aws.amazon.com/eks/latest/userguide/calico.html) network policy engine which enforces Kubernetes [Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) by managing host firewalls on all the Nodes.
+- Integration with [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html) via the [External Secrets operator](https://github.com/external-secrets/external-secrets) and/or the [Secrets Store CSI Driver](https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_csi_driver.html)
+- Insight into costs and how to allocate them to particular workloads via the open-source [Kubecost](https://github.com/kubecost/cost-model)
+
+Also, since the Quick Start deploys both EKS as well as many of the observability tools like OpenSearch and Grafana into private subnets (i.e. not on the Internet), we provide two secure mechanisms to access and manage them:
+- A bastion EC2 Instance preloaded with the right tools and associated with the right IAM role/permissions that is not reachable on the Internet - only via [AWS Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
+- An [AWS Client VPN](https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/what-is.html)
+
+While these are great for a proof-of-concept (POC) or development environment, in production you will likely have a [site-to-site VPN](https://docs.aws.amazon.com/vpn/latest/s2svpn/VPC_VPN.html) or a [DirectConnect](https://docs.aws.amazon.com/directconnect/latest/UserGuide/Welcome.html) to facilitate this secure access in a more scalable way.
+
+The provisioning of all these add-ons can be enabled/disabled by changing parameters in the [cdk.json](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-bootstrap/cdk.json) file.
+
+### Why CDK?
+
+The CDK is a great tool to use since it can orchestrate both the AWS and Kubernetes APIs from the same template(s) - as well as set up things like the IAM Roles for Service Accounts (IRSA) mappings between the two.
+
+> **NOTE:** You do not need to know how to use the CDK, or know Python, to use this Quick Start as-is with the instructions provided. We expose enough parameters in [cdk.json]() to allow you to customise it to suit most usecases without changing the template (just changing the parameters). You can, of course, also fork it and use it as the inspiration or the foundation for your own bespoke templates as well - but many customers won't need to do so.
+
+## How to use the Quick Start
+
+The template to provision the cluster and and the add-ons is in the [cluster-bootstrap/](https://github.com/aws-quickstart/quickstart-eks-cdk-python/tree/main/cluster-bootstrap) folder. The [cdk.json](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-bootstrap/cdk.json) contains the parameters to use and the template is mostly in the [eks_cluster.py](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-bootstrap/eks_cluster.py) file - though it imports/leverages the various other .py and .yaml files within the folder. If you have the CDK as well as the required packages from pip installed then running `cdk deploy` in this folder will deploy the Quick Start.
+
+The ideal way to deploy this template, though, is via [AWS CodeBuild](https://docs.aws.amazon.com/codebuild/) - which provides a GitOps-style pipeline for not just the initial provisioning and then ongoing changes/maintenance of the environment. This means that if you want to change something about the running cluser you just need to change the cdk.json and/or eks_cluster.py and then merge the change to the git branch/repo and then CodeBuild will automatically apply it for you. 
+
+We provide both the [buildspec.yml](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-bootstrap/buildspec.yml) to tell CodeBuild how to intall the CDK (via npm and pip) and then do the `cdk deploy` command for you as well as both a [CDK](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-codebuild/eks_codebuild.py) and resulting [CloudFormation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-codebuild/EKSCodeBuildStack.template.json) template (pre-generated for you with a `cdk synth` command from the `eks_codebuild.py` CDK template) to set up the CodeBuild project in the [cluster-codebuild/](https://github.com/aws-quickstart/quickstart-eks-cdk-python/tree/main/cluster-codebuild) folder. 
+
+To save you from the circular dependency of using the CDK (on your laptop?) to create the CodeBuild to then run the CDK for you to provision the cluster you can just use the [cluster-codebuild/EKSCodeBuildStack.template.json](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-codebuild/EKSCodeBuildStack.template.json) CloudFormation template directly.
+
+Alternatively, you can install and use CDK directly (not via CodeBuild) on another machine such as your laptop or an EC2 Bastion. This approach is documented [here](https://github.com/aws-quickstart/quickstart-eks-cdk-python/manual-install.md).
+
+## The three sample cdk.json sets of parameters
+
+While you can toggle any of the parameters to in a custom configuration, we include three `cdk.json` files in [cluster-bootstrap/](https://github.com/aws-quickstart/quickstart-eks-cdk-python/tree/main/cluster-bootstrap) around three possible configurations:
+
+1. The default [cdk.json or cdk.json.default](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-bootstrap/cdk.json) - if you don't change anything the default parameters will deploy you the most managed yet minimal EKS cluster including:
+    - Managed Node Group of m5.large Instances
+    - AWS Load Balancer Controller
+    - ExternalDNS
+    - EBS & EFS CSI Drivers
+    - Cluster Autoscaler
+    - Bastion
+    - Metrics Server
+    - CloudWatch Container Insights for Metrics and Logs
+        - With a log retention of 7 days
+    - Security Groups for Pods for network firewalling
+    - Secrets Manager CSI Driver (for Secrets Manager Integration)
+1. The Cloud Native Community [cdk.json.community](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-bootstrap/cdk.json.community) - replace the `cdk.json` file with this file (making it cdk.json instead) and get:
+    - Managed Node Group of m5.large Instances
+    - AWS Load Balancer Controller
+    - ExternalDNS
+    - EBS & EFS CSI Drivers
+    - Cluster Autoscaler
+    - Bastion
+    - Metrics Server
+    - Amazon OpenSearch Service (successor to Amazon Elasticsearch Service) for logs
+    - Amazon Managed Service for Prometheus (AMP) w/self-hosted Grafana
+    - Calico for Network Policies for network firewalling
+    - External Secrets Controller (for Secrets Manager Integration)
+1. The Fargate-only [cdk.json.fargate](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-bootstrap/cdk.json.fargate) - replace the `cdk.json` file with this file (making it cdk.json instead) and get:
+    - Fargate profile to run everything in the `kube-system` and `default` Namespaces via Fargate
+    - AWS Load Balancer Controller
+    - ExternalDNS
+    - Bastion
+    - Metrics Server
+    - CloudWatch Logs (because the Kubernetes Filter for sending to Elastic/OpenSearch doesn't work with Fargate ATM)
+    - Amazon Managed Service for Prometheus (AMP) w/self-hosted Grafana (beacause CloudWatch Container Insights doesn't work with Fargate ATM)
+    - Security Groups for Pods for network firewalling (built-in to Fargate so we don't need to reconfigure the CNI)
+    - External Secrets Controller (for Secrets Manager Integration)
+
+## How to deploy via CodeBuild
+
+1. Fork this [Git Repo](https://github.com/aws-quickstart/quickstart-eks-cdk-python) to your own GitHub account - for instruction see https://docs.github.com/en/get-started/quickstart/fork-a-repo.
+1. Select which of the [three cdk.json files](#the-three-cdkjson-sets-of-parameters) (cdk.json.default, cdk.json.community or cdk.json.fargate) you'd like as a base and copy that over the top of `cdk.json` in the `cluster-bootstrap/` folder.
+1. Edit the `cdk.json` file to further customise it to your environment. For example:
+    - If you want to use an existing IAM Role to administer the cluster intsead of creating a new one (which you'll then have to assume to administer the cluster) set `create_new_cluster_admin_role` to False and then add the ARN for your role in `existing_admin_role_arn`
+        - **NOTE** that if you bring an existing role AND deploy a Bastion that this role will get assigned to the Bastion by default as well (so that the Bastion can manage the cluster). This means that you need to allow `ec2.amazonaws.com` to `sts:AssumeRole` this role as well as add the Managed Policy `AmazonSSMManagedInstanceCore` to this role (so that your Bastion can register with SSM via this role and Session Manager will work)
+    - If you want to change the VPC CIDR or the the mask/size of the public or private subnets to be allocated from within that block change `vpc_cidr`, `vpc_cidr_mask_public` and/or `vpc_cidr_mask_private`.
+    - If you want to use an existing VPC rather than creating a new one then set `create_new_vpc` to False and set `existing_vpc_name` to the name of the VPC. The CDK will connect to AWS and work out the VPC and subnet IDs and which are public and private for you etc. from just the name.
+    - If you'd like an instance type different from the default `m5.large` or to set the desired or maximum quantities change `eks_node_instance_type`, `eks_node_quantity`, `eks_node_max_quantity`, etc.
+    - If you'd like the Managed Node Group to use Spot Instances instead of the default OnDemand change `eks_node_spot` to True
+    - And there are oter parameters in the file to change with names that are descriptive as to what they adjust. Many are detailed in the [Additional Documentation](#additional-documentation) around the the add-ons below.
+1. Find and replace `https://github.com/aws-quickstart/quickstart-eks-cdk-python.git` with the address to your GitHub fork in [cluster-codebuild/EKSCodeBuildStack.template.json](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-codebuild/EKSCodeBuildStack.template.json)
+1. (Only if you are not using the main branch) Find and replace `main` with the name of your branch.
+1. Go to the the console for the CloudFormation service in the AWS Console and deploy your updated [cluster-codebuild/EKSCodeBuildStack.template.json](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/cluster-codebuild/EKSCodeBuildStack.template.json)
+
+## Additional Documentation
+- [Deploy and connect to the Bastion](https://github.com/aws-quickstart/quickstart-eks-cdk-python/bastion.md)
+- [Deploy and connect to the Client VPN](https://github.com/aws-quickstart/quickstart-eks-cdk-python/client-vpn.md)
+- [Deploy and connect to OpenSearch for log search and visualisation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/opensearch.md)
+- [Deploy and connect to Prometheus (AMP) and Grafana for metrics search and visualisation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/amp.md)
+- [Deploy and connect to Kubecost for cost/usage analysis and attribution](https://github.com/aws-quickstart/quickstart-eks-cdk-python/kubecost.md)
+- [Deploy Open Policy Agent (OPA) Gatekeeper and sample policies via the Flux GitOps Operator](https://github.com/aws-quickstart/quickstart-eks-cdk-python/gatekeeper.md)
+- [Upgrading your EKS Cluster and add-ons via the CDK](https://github.com/aws-quickstart/quickstart-eks-cdk-python/upgrades.md)
