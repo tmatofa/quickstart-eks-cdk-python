@@ -111,7 +111,7 @@ While you can toggle any of the parameters to in a custom configuration, we incl
 
 ## Additional Documentation
 - [Deploy and connect to the Bastion](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/bastion.md)
-- [Deploy and connect to the Client VPN](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/client-vpn.md)
+- [Deploy and connect to the Client VPN](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/clientvpn.md)
 - [Deploy and connect to OpenSearch for log search and visualisation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/opensearch.md)
 - [Deploy and connect to Prometheus (AMP) and Grafana for metrics search and visualisation](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/amp.md)
 - [Deploy and connect to Kubecost for cost/usage analysis and attribution](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/kubecost.md)
