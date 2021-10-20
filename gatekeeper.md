@@ -1,6 +1,6 @@
 # Deploy Open Policy Agent (OPA) Gatekeeper and sample policies via the Flux GitOps Operator
 
-The `gatekeeper` folder contains the manifests to deploy [Gatekeeper's Helm Chart](https://github.com/open-policy-agent/gatekeeper/tree/master/charts/gatekeeper) as well as an example set of policies to help achieve a much better security and noisy neighbor situation - especially if doing multi-tenancy. See more about these example policies in `gatekeeper/README.md`.
+The [gatekeeper](https://github.com/aws-quickstart/quickstart-eks-cdk-python/tree/main/gatekeeper) folder contains the manifests to deploy [Gatekeeper's Helm Chart](https://github.com/open-policy-agent/gatekeeper/tree/master/charts/gatekeeper) as well as an example set of policies to help achieve a much better security and noisy neighbor situation - especially if doing multi-tenancy. See more about these example policies in [gatekeeper/README.md](https://github.com/aws-quickstart/quickstart-eks-cdk-python/blob/main/gatekeeper/README.md).
 
 This also serves as an example of how to use Flux v2 with EKS.
 
