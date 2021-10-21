@@ -1215,7 +1215,7 @@ class EKSClusterStack(core.Stack):
                     }
                 }
             )
-            fluentbit_chart_cw.node.add_dependency(fluentbit_service_account)
+            fluentbit_chart_cw.node.add_dependency(fluentbit_cw_service_account)
 
         # Security Group for Pods
         if (self.node.try_get_context("deploy_sg_for_pods") == "True"):
