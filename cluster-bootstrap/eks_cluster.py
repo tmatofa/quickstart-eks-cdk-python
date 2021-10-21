@@ -1433,6 +1433,9 @@ class EKSClusterStack(core.Stack):
                         "nodeExporter": {
                             "enabled": False
                         },
+                        "kube-state-metrics": {
+                            "disabled": True
+                        },
                         "serviceAccounts": {
                             "nodeExporter": {
                                 "create": False
