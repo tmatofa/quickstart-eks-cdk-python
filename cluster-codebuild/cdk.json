@@ -1,5 +1,5 @@
 {
-    "app": "python eks_codebuild.py",
+    "app": "python3 eks_codebuild.py",
     "context": {
         "github_owner": "aws-quickstart",
         "github_repo": "quickstart-eks-cdk-python",
