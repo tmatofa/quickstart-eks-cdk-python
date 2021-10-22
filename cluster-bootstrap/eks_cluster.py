@@ -968,12 +968,17 @@ class EKSClusterStack(core.Stack):
                 calico_operator_yaml_file, Loader=yaml.FullLoader))
             calico_operator_yaml_file.close()
             loop_iteration = 0
+            calico_operator_manifests = []
             for value in calico_operator_yaml:
                 # print(value)
                 loop_iteration = loop_iteration + 1
                 manifest_id = "CalicoOperator" + str(loop_iteration)
                 calico_operator_manifest = eks_cluster.add_manifest(
                     manifest_id, value)
+                calico_operator_manifests.append(calico_operator_manifest)
+                if (loop_iteration != 1):
+                    calico_operator_manifest.node.add_dependency(
+                        calico_operator_manifests[0])
 
             # Then we need to install the config for the operator out of the calico-crs.yaml file
             calico_crs_yaml_file = open("calico-crs.yaml", 'r')
@@ -1215,7 +1220,8 @@ class EKSClusterStack(core.Stack):
                     }
                 }
             )
-            fluentbit_chart_cw.node.add_dependency(fluentbit_cw_service_account)
+            fluentbit_chart_cw.node.add_dependency(
+                fluentbit_cw_service_account)
 
         # Security Group for Pods
         if (self.node.try_get_context("deploy_sg_for_pods") == "True"):

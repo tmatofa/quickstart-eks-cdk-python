@@ -1,4 +1,18 @@
 {
     "python.formatting.provider": "autopep8",
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
+    "cSpell.words": [
+        "amoung",
+        "Autoscaler",
+        "buildspec",
+        "customise",
+        "Fargate",
+        "firewalling",
+        "IRSA",
+        "Kubecost",
+        "schedulable",
+        "usecases",
+        "visualisation",
+        "visualise"
+    ]
 }
