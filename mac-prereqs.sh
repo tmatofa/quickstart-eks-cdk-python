@@ -7,9 +7,11 @@ if ! which brew > /dev/null ; then
 fi
 
 # Install python
-brew install python
+brew install python@3.10
+brew link python@3.10
 # Install Node & NPM
-brew install nodejs
+brew install nodejs@16
+brew link nodejs@16
 # Install kubectl
 brew install kubectl
 # Install fluxctl

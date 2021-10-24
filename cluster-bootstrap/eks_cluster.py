@@ -471,27 +471,20 @@ class EKSClusterStack(core.Stack):
                 iam.PolicyStatement.from_json(externaldns_policy_statement_json_2))
 
             # Deploy External DNS from the bitnami Helm chart
-            # For more info see https://github.com/bitnami/charts/tree/master/bitnami/external-dns
+            # For more info see https://github.com/kubernetes-sigs/external-dns/tree/master/charts/external-dns
+            # Changed from the Bitnami chart for Graviton/ARM64 support
             externaldns_chart = eks_cluster.add_helm_chart(
                 "external-dns",
                 chart="external-dns",
-                version="5.4.7",
+                version="1.3.2",
                 release="externaldns",
-                repository="https://charts.bitnami.com/bitnami",
+                repository="https://kubernetes-sigs.github.io/external-dns/",
                 namespace="kube-system",
                 values={
-                    "provider": "aws",
-                    "aws": {
-                        "region": self.region
-                    },
                     "serviceAccount": {
                         "create": False,
                         "name": "external-dns"
-                    },
-                    "podSecurityContext": {
-                        "fsGroup": 65534
-                    },
-                    "replicas": 2
+                    }
                 }
             )
             externaldns_chart.node.add_dependency(externaldns_service_account)
@@ -942,20 +935,15 @@ class EKSClusterStack(core.Stack):
 
         # Metrics Server (required for the Horizontal Pod Autoscaler (HPA))
         if (self.node.try_get_context("deploy_metrics_server") == "True"):
-            # For more info see https://github.com/bitnami/charts/tree/master/bitnami/metrics-server
+            # For more info see https://github.com/kubernetes-sigs/metrics-server/tree/master/charts/metrics-server
+            # Changed from the Bitnami chart for Graviton/ARM64 support
             metricsserver_chart = eks_cluster.add_helm_chart(
                 "metrics-server",
                 chart="metrics-server",
-                version="5.10.1",
+                version="3.6.0",
                 release="metricsserver",
-                repository="https://charts.bitnami.com/bitnami",
-                namespace="kube-system",
-                values={
-                    "replicas": 2,
-                    "apiService": {
-                        "create": True
-                    }
-                }
+                repository="https://kubernetes-sigs.github.io/metrics-server/",
+                namespace="kube-system"
             )
 
         # Calico to enforce NetworkPolicies
