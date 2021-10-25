@@ -17,8 +17,7 @@ The Ingress (and the required Service it uses) implements an HTTP ALB to serve t
 Elastic Block Storage (EBS) is the AWS block storage service in AWS. We've integrated it with our EKS environment by adding the CSI driver AWS maintains to the cluster as an add-on in the Quick Start.
 
 To deploy this example run:
-1. `kubectl apply -f ebs-storageclass.yaml` to create a storageclass referencing our EBS CSI Driver
-1. `kubectl apply -f ebs-pod.yaml` to create a PersistentVolumeClaim and a Pod that mounts that PVC
+1. `kubectl apply -f ebs-pod.yaml` to create a PersistentVolumeClaim and a Pod that mounts that PVC from the StorageClass creaed by the Quick Start `ebs`
 1. `kubectl get pods` and see our new `storage-test-ebs` running
 1. `kubectl exec -it storage-test-ebs -- /bin/bash` to give us an interactive shell into the running Pod
 1. `df -h` to show us the mounted Volumes - you can see our 1GB volume mounted to /mnt/test as we requested.
@@ -31,37 +30,12 @@ To deploy this example run:
 
 Elastic File System (EFS) is a managed service that presents filesystems that can be mounted by NFS clients.
 
-Unlike the EBS CSI Driver, the EFS CSI driver requires an EFS Filesytem to already exist and for us to tell it which one to use for as part of each StorageClass.
+Unlike the EBS CSI Driver, the EFS CSI driver requires an EFS Filesytem to already exist and for us to tell it which one to use as part of each StorageClass. We created both such an EFS Filesystem as well as a StorateClass referencing it called `efs` in the Quick Start.
 
-Create that in the AWS Console by:
-1. Go to the EC2 service in the AWS Console
-1. Click on `Security Groups` on the left-hand side navigation pane
-1. Click the `Create security group` button
-1. Name the security group `EFS`
-1. Also type `EFS` in the Description
-1. Pick the `EKSClusterStack/VPC` VPC in the VPC dropdown
-1. Click the `Add rule` button in the Inbound rules section
-1. Choose `NFS` in the Type dropdown
-1. Choose either `Anywhere-IPv4` or scope it to a particular CIDR in the Source dropdown
-1. Click the `Create security group` button
-1. Going to the EFS service in the AWS Console
-1. Click the `Create file system` button
-1. Click on the `Customize` button
-1. Click the `Next` button
-1. Choose the the VPC where your EKS Cluster lives (EKSClusterStack/VPC if the Quick Start creates it) VPC from the dropdown list
-1. Tick the X in the upper right of each of the 3 blue security groups
-1. Choose the EFS security group (you can type EFS in the filter box) for each of the mount targets (click it to see it added to the list below the dropdown)
-1. Once you see the EFS Security group listed 3 times (once under each AZ) click the `Next` button
-1. Click the `Next` button again and then click the `Create` button
-1. Make note of the File system ID starting fs- we'll need that in a moment.
+**NOTE:** By default we set the EFS Filesystem's Security Group to allow NFS connections from the Cluster's Security Group. If you are using Security Groups for Pods and the Pods don't have that Security Group attached you'll need to update the Filesystem's Security Group to allow them to connect. This example doesn't include a SG for the Pod so, unless you have set one on the default namespace etc. it should work.
 
-Now to use the EFS CSI Driver within Kubernetes:
-1. `nano efs-storageclass.yaml` or use your editor of choice
-1. Replace `<EFS file system ID>` with the file system ID from our EFS in the AWS console you noted above
-1. Do a Ctrl-X to exit (if you are using nano)
-1. Answer `Y` to the question as to whether to Save then press Enter/Return (if you are using nano)
-1. `kubectl apply -f efs-storageclass.yaml` to create a storageclass referencing our EFS CSI Driver and Filesystem
-1. `kubectl apply -f efs-pod.yaml` to create a PersistentVolumeClaim and a Pod that mounts that PVC
+To deploy this example run:
+1. `kubectl apply -f efs-pod.yaml` to create a PersistentVolumeClaim and a Pod that mounts that PVC from the StorageClass creaed by the Quick Start `ebs`
 1. `kubectl get pods` and see our new `storage-test-efs` running
 1. `kubectl exec -it storage-test-efs -- /bin/bash` to give us an interactive shell into the running Pod
 1. `df -h` to show us the mounted Volumes - you can see our unlimited (it shows as 8 Exabytes!) volume mounted to /mnt/test as we requested.

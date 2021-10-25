@@ -4,5 +4,6 @@ aws-cdk.aws-iam
 aws-cdk.aws-opensearchservice
 aws-cdk.aws-logs
 aws-cdk.aws-certificatemanager
+aws-cdk.aws-efs
 aws-cdk.core
 PyYAML

@@ -17,6 +17,7 @@ from aws_cdk import (
     aws_opensearchservice as opensearch,
     aws_logs as logs,
     aws_certificatemanager as cm,
+    aws_efs as efs,
     core
 )
 import os
@@ -682,6 +683,19 @@ class EKSClusterStack(core.Stack):
             awsebscsi_chart.node.add_dependency(
                 awsebscsidriver_service_account)
 
+            # Set up the StorageClass pointing at the new CSI Driver
+            # See https://github.com/kubernetes-sigs/aws-ebs-csi-driver/blob/master/examples/kubernetes/dynamic-provisioning/specs/storageclass.yaml
+            ebs_csi_storageclass = eks_cluster.add_manifest("EBSCSIStorageClass", {
+                "kind": "StorageClass",
+                "apiVersion": "storage.k8s.io/v1",
+                "metadata": {
+                    "name": "ebs"
+                },
+                "provisioner": "ebs.csi.aws.com",
+                "volumeBindingMode": "WaitForFirstConsumer"
+            })
+            ebs_csi_storageclass.node.add_dependency(awsebscsi_chart)
+
         # AWS EFS CSI Driver
         if (self.node.try_get_context("deploy_aws_efs_csi") == "True" and self.node.try_get_context("fargate_only_cluster") == "False"):
             awsefscsidriver_service_account = eks_cluster.add_service_account(
@@ -756,6 +770,53 @@ class EKSClusterStack(core.Stack):
             )
             awsefscsi_chart.node.add_dependency(
                 awsefscsidriver_service_account)
+
+            # Create Security Group for the EFS Filesystem
+            # Create SecurityGroup for OpenSearch
+            efs_security_group = ec2.SecurityGroup(
+                self, "EFSSecurityGroup",
+                vpc=eks_vpc,
+                allow_all_outbound=True
+            )
+            # Add a rule to allow the EKS Nodes to talk to our new EFS (will not work with SGs for Pods by default)
+            efs_security_group.add_ingress_rule(
+                eks_cluster.cluster_security_group,
+                ec2.Port.tcp(2049)
+            )
+            # Add a rule to allow our our VPC CIDR to talk to the EFS (SG for Pods will work by default)
+            # eks_cluster.cluster_security_group.add_ingress_rule(
+            #    ec2.Peer.prefix_list(eks_vpc.vpc_cidr_block)
+            #    ec2.Port.all_traffic()
+            # )
+
+            # Create an EFS Filesystem
+            # NOTE In production you likely want to change the removal_policy to RETAIN to avoid accidental data loss
+            efs_filesystem = efs.FileSystem(
+                self, "EFSFilesystem",
+                vpc=eks_vpc,
+                security_group=efs_security_group,
+                removal_policy=core.RemovalPolicy.DESTROY
+            )
+
+            # Set up the StorageClass pointing at the new CSI Driver
+            # See https://github.com/kubernetes-sigs/aws-efs-csi-driver/blob/master/examples/kubernetes/dynamic_provisioning/specs/storageclass.yaml
+            efs_csi_storageclass = eks_cluster.add_manifest("EFSCSIStorageClass", {
+                "kind": "StorageClass",
+                "apiVersion": "storage.k8s.io/v1",
+                "metadata": {
+                    "name": "efs"
+                },
+                "provisioner": "efs.csi.aws.com",
+                "parameters": {
+                    "provisioningMode": "efs-ap",
+                    "fileSystemId": efs_filesystem.file_system_id,
+                    "directoryPerms": "700",
+                    "gidRangeStart": "1000",
+                    "gidRangeEnd": "2000",
+                    "basePath": "/dynamic_provisioning"
+                }
+            })
+            efs_csi_storageclass.node.add_dependency(awsefscsi_chart)
 
         # Cluster Autoscaler
         if (self.node.try_get_context("deploy_cluster_autoscaler") == "True" and self.node.try_get_context("fargate_only_cluster") == "False"):
@@ -1134,19 +1195,17 @@ class EKSClusterStack(core.Stack):
                 iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchAgentServerPolicy"))
 
             # Set up the settings ConfigMap
-            cw_container_insights_configmap = eks_cluster.add_manifest("CWAgentConfigMap",
-                                                                       {
-                                                                           "apiVersion": "v1",
-                                                                           "data": {
-                                                                               "cwagentconfig.json": "{\n  \"logs\": {\n    \"metrics_collected\": {\n      \"kubernetes\": {\n        \"cluster_name\": \"" + eks_cluster.cluster_name + "\",\n        \"metrics_collection_interval\": 60\n      }\n    },\n    \"force_flush_interval\": 5\n  }\n}\n"
-                                                                           },
-                                                                           "kind": "ConfigMap",
-                                                                           "metadata": {
-                                                                               "name": "cwagentconfig",
-                                                                               "namespace": "kube-system"
-                                                                           }
-                                                                       }
-                                                                       )
+            cw_container_insights_configmap = eks_cluster.add_manifest("CWAgentConfigMap", {
+                "apiVersion": "v1",
+                "data": {
+                    "cwagentconfig.json": "{\n  \"logs\": {\n    \"metrics_collected\": {\n      \"kubernetes\": {\n        \"cluster_name\": \"" + eks_cluster.cluster_name + "\",\n        \"metrics_collection_interval\": 60\n      }\n    },\n    \"force_flush_interval\": 5\n  }\n}\n"
+                },
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "cwagentconfig",
+                    "namespace": "kube-system"
+                }
+            })
 
             # Import cloudwatch-agent.yaml to a list of dictionaries and submit them as a manifest to EKS
             # Read the YAML file
@@ -1729,34 +1788,30 @@ class EKSClusterStack(core.Stack):
                 fargate_pod_execution_role.add_to_policy(
                     iam.PolicyStatement.from_json(fargate_cw_logs_policy_statement_json_1))
 
-                fargate_namespace_manifest = eks_cluster.add_manifest("FargateLoggingNamespace",
-                                                                      {
-                                                                          "kind": "Namespace",
-                                                                          "apiVersion": "v1",
-                                                                          "metadata": {
-                                                                              "name": "aws-observability",
-                                                                              "labels": {
-                                                                                  "aws-observability": "enabled"
-                                                                              }
-                                                                          }
-                                                                      }
-                                                                      )
+                fargate_namespace_manifest = eks_cluster.add_manifest("FargateLoggingNamespace", {
+                    "kind": "Namespace",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "aws-observability",
+                        "labels": {
+                            "aws-observability": "enabled"
+                        }
+                    }
+                })
 
-                fargate_fluentbit_manifest_cw = eks_cluster.add_manifest("FargateLoggingCW",
-                                                                         {
-                                                                             "kind": "ConfigMap",
-                                                                             "apiVersion": "v1",
-                                                                             "metadata": {
-                                                                                 "name": "aws-logging",
-                                                                                 "namespace": "aws-observability"
-                                                                             },
-                                                                             "data": {
-                                                                                 "output.conf": "[OUTPUT]\n    Name cloudwatch_logs\n    Match   *\n    region " + self.region + "\n    log_group_name fluent-bit-cloudwatch\n    log_stream_prefix from-fluent-bit-\n    auto_create_group true\n    log_retention_days " + str(self.node.try_get_context("cloudwatch_container_insights_logs_retention_days")) + "\n",
-                                                                                 "parsers.conf": "[PARSER]\n    Name crio\n    Format Regex\n    Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>P|F) (?<log>.*)$\n    Time_Key    time\n    Time_Format %Y-%m-%dT%H:%M:%S.%L%z\n",
-                                                                                 "filters.conf": "[FILTER]\n   Name parser\n   Match *\n   Key_name log\n   Parser crio\n   Reserve_Data On\n   Preserve_Key On\n"
-                                                                             }
-                                                                         }
-                                                                         )
+                fargate_fluentbit_manifest_cw = eks_cluster.add_manifest("FargateLoggingCW", {
+                    "kind": "ConfigMap",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "aws-logging",
+                        "namespace": "aws-observability"
+                    },
+                    "data": {
+                        "output.conf": "[OUTPUT]\n    Name cloudwatch_logs\n    Match   *\n    region " + self.region + "\n    log_group_name fluent-bit-cloudwatch\n    log_stream_prefix from-fluent-bit-\n    auto_create_group true\n    log_retention_days " + str(self.node.try_get_context("cloudwatch_container_insights_logs_retention_days")) + "\n",
+                        "parsers.conf": "[PARSER]\n    Name crio\n    Format Regex\n    Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>P|F) (?<log>.*)$\n    Time_Key    time\n    Time_Format %Y-%m-%dT%H:%M:%S.%L%z\n",
+                        "filters.conf": "[FILTER]\n   Name parser\n   Match *\n   Key_name log\n   Parser crio\n   Reserve_Data On\n   Preserve_Key On\n"
+                    }
+                })
                 fargate_fluentbit_manifest_cw.node.add_dependency(
                     fargate_namespace_manifest)
             else:
@@ -1785,32 +1840,28 @@ class EKSClusterStack(core.Stack):
                 fargate_pod_execution_role.add_to_policy(
                     iam.PolicyStatement.from_json(fargate_os_policy_statement_json_1))
 
-                fargate_namespace_manifest = eks_cluster.add_manifest("FargateLoggingNamespace",
-                                                                      {
-                                                                          "kind": "Namespace",
-                                                                          "apiVersion": "v1",
-                                                                          "metadata": {
-                                                                              "name": "aws-observability",
-                                                                              "labels": {
-                                                                                  "aws-observability": "enabled"
-                                                                              }
-                                                                          }
-                                                                      }
-                                                                      )
+                fargate_namespace_manifest = eks_cluster.add_manifest("FargateLoggingNamespace", {
+                    "kind": "Namespace",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "aws-observability",
+                        "labels": {
+                            "aws-observability": "enabled"
+                        }
+                    }
+                })
 
-                fargate_fluentbit_manifest_os = eks_cluster.add_manifest("FargateLoggingOS",
-                                                                         {
-                                                                             "kind": "ConfigMap",
-                                                                             "apiVersion": "v1",
-                                                                             "metadata": {
-                                                                                 "name": "aws-logging",
-                                                                                 "namespace": "aws-observability"
-                                                                             },
-                                                                             "data": {
-                                                                                 "output.conf": "[OUTPUT]\n  Name  es\n  Match *\n  AWS_Region "+self.region+"\n  AWS_Auth On\n  Host "+os_domain.domain_endpoint+"\n  Port 443\n  TLS On\n  Replace_Dots On\n  Logstash_Format On\n"
-                                                                             }
-                                                                         }
-                                                                         )
+                fargate_fluentbit_manifest_os = eks_cluster.add_manifest("FargateLoggingOS", {
+                    "kind": "ConfigMap",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "aws-logging",
+                        "namespace": "aws-observability"
+                    },
+                    "data": {
+                        "output.conf": "[OUTPUT]\n  Name  es\n  Match *\n  AWS_Region "+self.region+"\n  AWS_Auth On\n  Host "+os_domain.domain_endpoint+"\n  Port 443\n  TLS On\n  Replace_Dots On\n  Logstash_Format On\n"
+                    }
+                })
                 fargate_fluentbit_manifest_os.node.add_dependency(
                     fargate_namespace_manifest)
             else:
