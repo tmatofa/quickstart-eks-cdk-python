@@ -1,6 +1,6 @@
-aws-cdk.core
-aws-cdk.aws_ec2
-aws-cdk.aws_rds
-aws-cdk.aws_eks
-aws-cdk.aws_iam
-pyyaml
+aws-cdk.core==1.128.0
+aws-cdk.aws_ec2==1.128.0
+aws-cdk.aws_rds==1.128.0
+aws-cdk.aws_eks==1.128.0
+aws-cdk.aws_iam==1.128.0
+PyYAML==6.0
