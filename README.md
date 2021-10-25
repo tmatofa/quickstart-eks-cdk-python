@@ -111,6 +111,8 @@ While you can toggle any of the parameters to in a custom configuration, we incl
 1. Go to the CodeBuild console, click on the Build project that starts with `EKSCodeBuild`, and then click the Start build button.
 1. (Optional) You can click the Tail logs button to follow along with the build process
 
+![gitops_diagram](gitops-diagram.png)
+
 **_NOTE:_** This also enables a GitOps pattern where changes merged to the cluster-bootstrap folder on the branch mentioned (main by default) will re-trigger this CodeBuild to do another `npx cdk deploy` via web hook.
 
 ## Additional Documentation
