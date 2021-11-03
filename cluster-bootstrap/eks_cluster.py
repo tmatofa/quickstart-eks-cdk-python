@@ -1883,5 +1883,5 @@ else:
 # Note that if we didn't pass through the ACCOUNT and REGION from these environment variables that
 # it won't let us create 3 AZs and will only create a max of 2 - even when we ask for 3 in eks_vpc
 eks_cluster_stack = EKSClusterStack(
-    app, "EKSClusterStack", env=core.Environment(account=account, region=region))
+    app, "EKSClusterStack2", env=core.Environment(account=account, region=region))
 app.synth()
