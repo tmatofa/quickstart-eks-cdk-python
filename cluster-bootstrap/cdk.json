@@ -14,7 +14,7 @@
       "eks_deploy_managed_nodegroup": "True",
       "eks_node_quantity": 3,
       "eks_node_max_quantity": 5,
-      "eks_node_disk_size": 20,
+      "eks_node_disk_size": 30,
       "eks_node_instance_type": "m5d.24xlarge",
       "eks_node_ami_version": "1.21.4-20211008",
       "eks_node_spot": "False",
